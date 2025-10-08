@@ -19,8 +19,7 @@ void rtype::srv::GameServer::sendErrorResponse(const network::Handle handle)
     setPolloutForHandle(handle);
 }
 
-std::vector<uint8_t> rtype::srv::GameServer::buildJoinMsgForClient([[maybe_unused]] const uint8_t *data,
-    [[maybe_unused]] std::size_t offset)
+std::vector<uint8_t> rtype::srv::GameServer::buildJoinMsgForClient(const uint8_t *data, std::size_t offset)
 {
     return std::vector(data, data + offset);
 }
