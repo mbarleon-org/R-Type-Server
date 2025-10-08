@@ -71,7 +71,7 @@ static void makeAllThreads(const rtype::srv::Config &cfg)
         }
     }
     if (!cfg.tcp_only) {
-        for (auto &thread : rtype::srv::startUdpServers(cfg.udp_endpoint, cfg.n_cores, cfg.tcp_endpoint, quitServer)) {
+        for (auto &thread : rtype::srv::startUdpServers(cfg.udp_endpoint, cfg.n_cores, cfg.tcp_endpoint, cfg.external_udp_endpoint, quitServer)) {
             threads.emplace_back(std::move(thread));
         }
     }

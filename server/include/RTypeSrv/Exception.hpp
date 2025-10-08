@@ -57,8 +57,9 @@ class RTYPE_SRV_API Exception final : public std::exception
         static std::string concatStrings(Args &&...args)
         {
             std::ostringstream oss;
-
-            (oss << ... << args);
+            if constexpr (sizeof...(args) > 0) {
+                (oss << ... << args);
+            }
             return oss.str();
         }
 };

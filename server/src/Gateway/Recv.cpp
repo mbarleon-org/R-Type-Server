@@ -17,7 +17,7 @@ void rtype::srv::Gateway::_recvPackets(const network::NFDS i)
         if (accum.size() > MAX_BUFFER_SIZE) {
             throw std::runtime_error("Client exceded max buffer size.");
         }
-    } else if (ret == 0) {
+    } else {
         throw std::runtime_error("Client closed connection.");
     }
 }

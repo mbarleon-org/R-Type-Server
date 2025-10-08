@@ -33,20 +33,21 @@ std::thread rtype::srv::startTcpServer(const network::Endpoint &endpoint, std::a
  * @return A vector of thread objects representing the running servers.
  */
 std::vector<std::thread> rtype::srv::startUdpServers(network::Endpoint baseEndpoint, std::size_t ncores,
-    const network::Endpoint &tcpEndpoint, std::atomic<bool> &quitServer) noexcept
+    const network::Endpoint &tcpEndpoint, network::Endpoint externalUdpEndpoint, std::atomic<bool> &quitServer) noexcept
 {
     std::vector<std::thread> threads{};
 
     threads.reserve(ncores);
     for (std::size_t i = 0; i < ncores; ++i) {
-        threads.emplace_back([baseEndpoint, ncores, tcpEndpoint, &quitServer]() {
+        threads.emplace_back([baseEndpoint, ncores, tcpEndpoint, externalUdpEndpoint, &quitServer]() {
             try {
-                GameServer(baseEndpoint, ncores, tcpEndpoint, quitServer).StartServer();
+                GameServer(baseEndpoint, ncores, tcpEndpoint, externalUdpEndpoint, quitServer).StartServer();
             } catch (const Exception &e) {
                 std::cerr << "Exception caught while running server: " << e.where() << ": " << e.what() << std::endl;
             }
         });
         ++baseEndpoint.port;
+        ++externalUdpEndpoint.port;
     }
     return threads;
 }

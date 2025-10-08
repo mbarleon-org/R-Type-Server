@@ -8,7 +8,6 @@
 #include <RTypeSrv/Gateway.hpp>
 #include <RTypeSrv/Utils/IPToStr.hpp>
 #include <RTypeSrv/Utils/Logger.hpp>
-#include <iostream>
 #include <ranges>
 
 /**

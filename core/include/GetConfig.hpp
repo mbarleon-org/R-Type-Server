@@ -13,6 +13,7 @@ struct Config {
         bool udp_only = false;
         network::Endpoint tcp_endpoint;
         network::Endpoint udp_endpoint;
+        network::Endpoint external_udp_endpoint;
         std::size_t n_cores = 4;
 };
 

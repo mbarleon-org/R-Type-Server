@@ -1,7 +1,6 @@
 #include <RTypeSrv/Exception.hpp>
 #include <RTypeSrv/Gateway.hpp>
 #include <RTypeSrv/Utils/Logger.hpp>
-#include <iostream>
 
 #if defined(_WIN32)
 template class RTYPE_SRV_API rtype::srv::utils::Singleton<rtype::srv::Gateway>;

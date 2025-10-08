@@ -23,6 +23,6 @@ namespace rtype::srv {
  * @return A vector of thread objects representing the running servers.
  */
 [[nodiscard]] std::vector<std::thread> startUdpServers(network::Endpoint baseEndpoint, std::size_t ncores,
-    const network::Endpoint &tcpEndpoint, std::atomic<bool> &quitServer) noexcept;
+    const network::Endpoint &tcpEndpoint, network::Endpoint externalUdpEndpoint, std::atomic<bool> &quitServer) noexcept;
 
 }// namespace rtype::srv
