@@ -1,3 +1,6 @@
 /.github/ @mbarleon-org/r-type
 /LICENSE @mbarleon-org/r-type
+/jenkins-build.sh @mbarleon-org/r-type
+/build.sh @mbarleon-org/r-type
+/build.ps1 @mbarleon-org/r-type
 /.github/CODEOWNERS @mbarleon
