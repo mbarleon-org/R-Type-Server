@@ -9,21 +9,51 @@
     #define _SSCANF std::sscanf
 #endif
 
+/**
+ * @brief Gets the first part of an integer.
+ * @param n The integer.
+ * @return The first part of the integer.
+ */
 static std::uint8_t fstPart(const int n) noexcept
 {
     return static_cast<std::uint8_t>(n >> 8);
 }
 
+/**
+ * @brief Gets the last part of an integer.
+ * @param n The integer.
+ * @return The last part of the integer.
+ */
 static std::uint8_t lastPart(const int n) noexcept
 {
     return static_cast<std::uint8_t>(n & 0b0000000011111111);
 }
 
+/**
+ * @brief Builds an IPv4 address from four integers.
+ * @param a The first part of the IP address.
+ * @param b The second part of the IP address.
+ * @param c The third part of the IP address.
+ * @param d The fourth part of the IP address.
+ * @return An array of 16 bytes representing the IPv4 address.
+ */
 static std::array<std::uint8_t, 16> buildIpV4(const int a, const int b, const int c, const int d) noexcept
 {
     return {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, lastPart(a), lastPart(b), lastPart(c), lastPart(d)};
 }
 
+/**
+ * @brief Builds an IPv6 address from eight integers.
+ * @param a The first part of the IP address.
+ * @param b The second part of the IP address.
+ * @param c The third part of the IP address.
+ * @param d The fourth part of the IP address.
+ * @param e The fifth part of the IP address.
+ * @param f The sixth part of the IP address.
+ * @param g The seventh part of the IP address.
+ * @param h The eighth part of the IP address.
+ * @return An array of 16 bytes representing the IPv6 address.
+ */
 static std::array<std::uint8_t, 16> buildIpV6(const int a, const int b, const int c, const int d, const int e, const int f, const int g,
     const int h) noexcept
 {
@@ -31,6 +61,11 @@ static std::array<std::uint8_t, 16> buildIpV6(const int a, const int b, const in
         fstPart(f), lastPart(f), fstPart(g), lastPart(g), fstPart(h), lastPart(h)};
 }
 
+/**
+ * @brief Gets an IP address from a string.
+ * @param val The string to parse.
+ * @param ip The array to store the IP address in.
+ */
 static void getIp(const std::string &val, std::array<std::uint8_t, 16> &ip)
 {
     int a, b, c, d, e, f, g, h;
@@ -43,6 +78,11 @@ static void getIp(const std::string &val, std::array<std::uint8_t, 16> &ip)
     }
 }
 
+/**
+ * @brief Gets a port from a string.
+ * @param val The string to parse.
+ * @param port The variable to store the port in.
+ */
 static void getPort(const std::string &val, uint16_t &port)
 {
     int p;
@@ -53,6 +93,12 @@ static void getPort(const std::string &val, uint16_t &port)
     port = static_cast<std::uint16_t>(p);
 }
 
+/**
+ * @brief Splits a line into a key and a value.
+ * @param line The line to split.
+ * @param key The variable to store the key in.
+ * @param val The variable to store the value in.
+ */
 static void splitLine(const std::string &line, std::string &key, std::string &val)
 {
     const std::size_t pos = line.find('=');
@@ -68,6 +114,12 @@ static void splitLine(const std::string &line, std::string &key, std::string &va
     val.erase(val.find_last_not_of(" \t") + 1);
 }
 
+/**
+ * @brief Checks if an endpoint is valid, and sets it to a default value if not.
+ * @param endpoint The endpoint to check.
+ * @param default_ip The default IP address to use if the endpoint's IP address is invalid.
+ * @param default_port The default port to use if the endpoint's port is invalid.
+ */
 static void checkEndpoint(rtype::network::Endpoint &endpoint, const std::array<std::uint8_t, 16> &default_ip, const uint16_t default_port)
 {
     bool is_zero = true;
@@ -86,11 +138,20 @@ static void checkEndpoint(rtype::network::Endpoint &endpoint, const std::array<s
     }
 }
 
+/**
+ * @brief Checks if an endpoint is valid, and sets it to a default value if not.
+ * @param endpoint The endpoint to check.
+ * @param default_port The default port to use if the endpoint's port is invalid.
+ */
 static void checkEndpoint(rtype::network::Endpoint &endpoint, const uint16_t default_port)
 {
     checkEndpoint(endpoint, buildIpV4(0, 0, 0, 0), default_port);
 }
 
+/**
+ * @brief Validates a configuration.
+ * @param config The configuration to validate.
+ */
 static void validateConfig(rtype::srv::Config &config)
 {
     if (config.tcp_only && config.udp_only) {
@@ -109,6 +170,11 @@ static void validateConfig(rtype::srv::Config &config)
     }
 }
 
+/**
+ * @brief Gets the configuration from a file.
+ * @param filename The name of the configuration file.
+ * @return The configuration.
+ */
 rtype::srv::Config rtype::srv::getConfig(const std::string &filename)
 {
     Config config;

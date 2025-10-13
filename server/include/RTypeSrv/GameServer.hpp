@@ -15,13 +15,26 @@
 
 namespace rtype::srv {
 
+/**
+ * @brief The main class for the R-Type game server.
+ */
 class RTYPE_SRV_API GameServer : public utils::NonCopyable
 {
     public:
+        /**
+         * @brief Constructs a new GameServer object.
+         * @param baseEndpoint The base endpoint for the server.
+         * @param ncores The number of cores to use.
+         * @param tcpEndpoint The TCP endpoint for the server.
+         * @param quitServer A reference to an atomic boolean that will be set to true when the server should quit.
+         */
         GameServer(const network::Endpoint &baseEndpoint, std::size_t ncores, const network::Endpoint &tcpEndpoint,
             const network::Endpoint &externalUdpEndpoint, std::atomic<bool> &quitServer);
         ~GameServer() noexcept = default;
 
+        /**
+         * @brief Starts the server.
+         */
         void StartServer() noexcept;
 
     private:

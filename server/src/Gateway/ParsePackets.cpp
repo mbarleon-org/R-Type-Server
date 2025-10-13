@@ -4,6 +4,10 @@
 #include <ranges>
 #include <stdexcept>
 
+/**
+ * @brief Sets the POLLOUT flag for a given handle.
+ * @param h The handle to set the POLLOUT flag for.
+ */
 void rtype::srv::Gateway::setPolloutForHandle(const network::Handle h) noexcept
 {
     for (auto &fd : _fds) {
@@ -14,6 +18,13 @@ void rtype::srv::Gateway::setPolloutForHandle(const network::Handle h) noexcept
     }
 }
 
+/**
+ * @brief Handles a GS registration packet.
+ * @param handle The handle of the sender.
+ * @param data A pointer to the data received.
+ * @param offset A reference to the current offset in the data.
+ * @param bufsize The total size of the data.
+ */
 void rtype::srv::Gateway::handleGSRegistration(const network::Handle handle, const uint8_t *data, std::size_t &offset, std::size_t bufsize)
 {
     if (offset + 1 + 16 + 2 > bufsize) {
@@ -32,6 +43,13 @@ void rtype::srv::Gateway::handleGSRegistration(const network::Handle handle, con
     offset += 1 + 16 + 2;
 }
 
+/**
+ * @brief Handles a CREATE packet.
+ * @param handle The handle of the sender.
+ * @param data A pointer to the data received.
+ * @param offset A reference to the current offset in the data.
+ * @param bufsize The total size of the data.
+ */
 void rtype::srv::Gateway::handleCreate(network::Handle handle, const uint8_t *data, std::size_t &offset, std::size_t bufsize)
 {
     if (offset + 2 > bufsize) {
@@ -63,6 +81,12 @@ void rtype::srv::Gateway::handleCreate(network::Handle handle, const uint8_t *da
     offset += 2;
 }
 
+/**
+ * @brief Parses a GS key from a byte array.
+ * @param data A pointer to the data to parse.
+ * @param offset The offset to start parsing from.
+ * @return A pair containing the IP address and port of the GS.
+ */
 std::pair<std::array<uint8_t, 16>, uint16_t> rtype::srv::Gateway::parseGSKey(const uint8_t *data, const std::size_t offset)
 {
     std::array<uint8_t, 16> ip{};
@@ -71,6 +95,10 @@ std::pair<std::array<uint8_t, 16>, uint16_t> rtype::srv::Gateway::parseGSKey(con
     return {ip, port};
 }
 
+/**
+ * @brief Finds the least occupied game server.
+ * @return An iterator to the least occupied game server, or std::nullopt if no game servers are available.
+ */
 std::optional<rtype::srv::Gateway::GsRegistryType::iterator> rtype::srv::Gateway::findLeastOccupiedGS()
 {
     auto min_gs = _gs_registry.end();
@@ -90,6 +118,11 @@ std::optional<rtype::srv::Gateway::GsRegistryType::iterator> rtype::srv::Gateway
     return min_gs;
 }
 
+/**
+ * @brief Gets the handle for a game server.
+ * @param gs_key The key of the game server.
+ * @return The handle of the game server, or 0 if the game server is not found.
+ */
 rtype::network::Handle rtype::srv::Gateway::getGSHandle(const IP &gs_key) const
 {
     if (const auto it_handle = _gs_addr_to_handle.find(gs_key); it_handle != _gs_addr_to_handle.end()) {
@@ -98,17 +131,33 @@ rtype::network::Handle rtype::srv::Gateway::getGSHandle(const IP &gs_key) const
     return 0;
 }
 
+/**
+ * @brief Builds a CREATE message.
+ * @param gametype The type of game to create.
+ * @return A vector of bytes representing the CREATE message.
+ */
 std::vector<uint8_t> rtype::srv::Gateway::buildCreateMsg(uint8_t gametype)
 {
     return {3, gametype};
 }
 
+/**
+ * @brief Sends an error response to a client.
+ * @param handle The handle of the client to send the error to.
+ */
 void rtype::srv::Gateway::sendErrorResponse(const network::Handle handle)
 {
     _send_spans[handle].push_back({0});
     setPolloutForHandle(handle);
 }
 
+/**
+ * @brief Handles a JOIN packet.
+ * @param handle The handle of the sender.
+ * @param data A pointer to the data received.
+ * @param offset A reference to the current offset in the data.
+ * @param bufsize The total size of the data.
+ */
 void rtype::srv::Gateway::handleJoin(const network::Handle handle, const uint8_t *data, std::size_t &offset, std::size_t bufsize)
 {
     if (offset + 1 + 4 > bufsize) {
@@ -139,12 +188,22 @@ void rtype::srv::Gateway::handleJoin(const network::Handle handle, const uint8_t
     offset += 1 + 4;
 }
 
+/**
+ * @brief Extracts a game ID from a byte array.
+ * @param data A pointer to the data to extract the game ID from.
+ * @return The extracted game ID.
+ */
 uint32_t rtype::srv::Gateway::extractGameId(const uint8_t *data) noexcept
 {
     return (static_cast<uint32_t>(data[0]) << 24) | (static_cast<uint32_t>(data[1]) << 16) | (static_cast<uint32_t>(data[2]) << 8)
         | (static_cast<uint32_t>(data[3]));
 }
 
+/**
+ * @brief Finds the GS key for a given handle.
+ * @param handle The handle to find the GS key for.
+ * @return The GS key, or std::nullopt if the handle is not found.
+ */
 std::optional<rtype::srv::Gateway::IP> rtype::srv::Gateway::findGSKeyByHandle(const network::Handle handle) const noexcept
 {
     for (const auto &[key, h] : _gs_addr_to_handle) {
@@ -155,11 +214,24 @@ std::optional<rtype::srv::Gateway::IP> rtype::srv::Gateway::findGSKeyByHandle(co
     return std::nullopt;
 }
 
+/**
+ * @brief Builds a JOIN message for a client.
+ * @param data A pointer to the data to build the message from.
+ * @param offset The offset to start building from.
+ * @return A vector of bytes representing the JOIN message.
+ */
 std::vector<uint8_t> rtype::srv::Gateway::buildJoinMsgForClient(const uint8_t *data, std::size_t offset)
 {
     return std::vector(data + offset, data + offset + 1 + 16 + 2 + 4);
 }
 
+/**
+ * @brief Builds a JOIN message for a game server.
+ * @param ip The IP address of the game server.
+ * @param port The port of the game server.
+ * @param id The ID of the game to join.
+ * @return A vector of bytes representing the JOIN message.
+ */
 std::vector<uint8_t> rtype::srv::Gateway::buildJoinMsgForGS(const std::array<uint8_t, 16> &ip, const uint16_t port, const uint32_t id)
 {
     std::vector<uint8_t> join_msg;
@@ -175,6 +247,13 @@ std::vector<uint8_t> rtype::srv::Gateway::buildJoinMsgForGS(const std::array<uin
     return join_msg;
 }
 
+/**
+ * @brief Handles an OCCUPANCY packet.
+ * @param handle The handle of the sender.
+ * @param data A pointer to the data received.
+ * @param offset A reference to the current offset in the data.
+ * @param bufsize The total size of the data.
+ */
 void rtype::srv::Gateway::handleOccupancy([[maybe_unused]] network::Handle handle, const uint8_t *data, std::size_t &offset,
     std::size_t bufsize)
 {
@@ -186,6 +265,13 @@ void rtype::srv::Gateway::handleOccupancy([[maybe_unused]] network::Handle handl
     offset += 1 + 16 + 2 + 1;
 }
 
+/**
+ * @brief Handles an OK/KO packet.
+ * @param handle The handle of the sender.
+ * @param data A pointer to the data received.
+ * @param offset A reference to the current offset in the data.
+ * @param bufsize The total size of the data.
+ */
 void rtype::srv::Gateway::handleOKKO([[maybe_unused]] network::Handle handle, [[maybe_unused]] const uint8_t *data, std::size_t &offset,
     std::size_t bufsize)
 {
@@ -195,6 +281,13 @@ void rtype::srv::Gateway::handleOKKO([[maybe_unused]] network::Handle handle, [[
     offset += 1;
 }
 
+/**
+ * @brief Handles a GID packet.
+ * @param handle The handle of the sender.
+ * @param data A pointer to the data received.
+ * @param offset A reference to the current offset in the data.
+ * @param bufsize The total size of the data.
+ */
 void rtype::srv::Gateway::handleGID(const network::Handle handle, const uint8_t *data, std::size_t &offset, std::size_t bufsize)
 {
     if (offset + 1 + 4 > bufsize) {
@@ -212,6 +305,12 @@ void rtype::srv::Gateway::handleGID(const network::Handle handle, const uint8_t 
     offset = pos + gids.size() * 4;
 }
 
+/**
+ * @brief Parses an occupancy packet.
+ * @param data A pointer to the data to parse.
+ * @param offset The offset to start parsing from.
+ * @return A pair containing the GS key and the occupancy.
+ */
 std::pair<rtype::srv::Gateway::IP, uint8_t> rtype::srv::Gateway::parseOccupancy(const uint8_t *data, const std::size_t offset)
 {
     std::array<uint8_t, 16> ip{};
@@ -221,6 +320,13 @@ std::pair<rtype::srv::Gateway::IP, uint8_t> rtype::srv::Gateway::parseOccupancy(
     return {{ip, port}, occ};
 }
 
+/**
+ * @brief Parses a GID packet.
+ * @param data A pointer to the data to parse.
+ * @param start The offset to start parsing from.
+ * @param bufsize The total size of the data.
+ * @return A vector of game IDs.
+ */
 std::vector<uint32_t> rtype::srv::Gateway::parseGIDs(const uint8_t *data, const std::size_t start, std::size_t bufsize)
 {
     std::vector<uint32_t> gids;
@@ -232,6 +338,9 @@ std::vector<uint32_t> rtype::srv::Gateway::parseGIDs(const uint8_t *data, const 
     return gids;
 }
 
+/**
+ * @brief Parses packets received from clients.
+ */
 void rtype::srv::Gateway::_parsePackets()
 {
     for (auto &[handle, buf] : _recv_spans) {

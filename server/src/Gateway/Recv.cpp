@@ -1,6 +1,11 @@
 #include <RTypeNet/Recv.hpp>
 #include <RTypeSrv/Gateway.hpp>
 
+/**
+ * @brief Receives packets from a client.
+ *
+ * @param i The index of the client in the `_fds` array.
+ */
 void rtype::srv::Gateway::_recvPackets(const network::NFDS i)
 {
     const auto handle = _fds[i].handle;

@@ -4,6 +4,9 @@
 
 namespace rtype::srv::utils {
 
+/**
+ * @brief A base class for classes that should not be copyable.
+ */
 class RTYPE_SRV_API NonCopyable
 {
     public:

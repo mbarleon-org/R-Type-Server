@@ -3,6 +3,14 @@
 #include <RTypeSrv/Utils/Logger.hpp>
 #include <ranges>
 
+/**
+ * @brief Constructs a new GameServer object.
+ *
+ * @param baseEndpoint The base endpoint of the server.
+ * @param ncores The number of cores to use.
+ * @param tcpEndpoint The TCP endpoint of the server.
+ * @param quitServer A reference to an atomic boolean that will be set to true when the server should quit.
+ */
 rtype::srv::GameServer::GameServer(const network::Endpoint &baseEndpoint, std::size_t ncores, const network::Endpoint &tcpEndpoint,
     const network::Endpoint &externalUdpEndpoint, std::atomic<bool> &quitServer)
 {
@@ -13,6 +21,9 @@ rtype::srv::GameServer::GameServer(const network::Endpoint &baseEndpoint, std::s
     _external_endpoint = externalUdpEndpoint;
 }
 
+/**
+ * @brief Initializes the server.
+ */
 void rtype::srv::GameServer::StartServer() noexcept
 {
     if (_is_running) {

@@ -12,13 +12,22 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <functional>
 #include <thread>
 #include <unordered_map>
 #include <vector>
 
+/**
+ * @brief A hash function for std::array<unsigned char, 16>.
+ */
 template<>
 struct std::hash<std::array<unsigned char, 16>> {
+        /**
+         * @brief Computes the hash of an array.
+         * @param arr The array to hash.
+         * @return The hash of the array.
+         */
         std::size_t operator()(const std::array<unsigned char, 16> &arr) const noexcept
         {
             std::size_t h = 0;
@@ -31,7 +40,15 @@ struct std::hash<std::array<unsigned char, 16>> {
 
 namespace rtype::srv {
 
+/**
+ * @brief A hash function for std::pair<std::array<uint8_t, 16>, uint16_t>.
+ */
 struct RTYPE_SRV_API pair_hash {
+        /**
+         * @brief Computes the hash of a pair.
+         * @param p The pair to hash.
+         * @return The hash of the pair.
+         */
         std::size_t operator()(const std::pair<std::array<uint8_t, 16>, uint16_t> &p) const
         {
             const std::size_t h1 = std::hash<uint16_t>{}(p.second);
@@ -42,7 +59,15 @@ struct RTYPE_SRV_API pair_hash {
         };
 };
 
+/**
+ * @brief A hash function for std::array.
+ */
 struct RTYPE_SRV_API array_hash {
+        /**
+         * @brief Computes the hash of an array.
+         * @param arr The array to hash.
+         * @return The hash of the array.
+         */
         template<typename T, std::size_t N>
         std::size_t operator()(const std::array<T, N> &arr) const
         {
@@ -51,15 +76,30 @@ struct RTYPE_SRV_API array_hash {
                 hash ^= std::hash<T>{}(elem) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
             }
             return hash;
-        };
+        }
 };
 
+/**
+ * @brief The main gateway for the R-Type server.
+ *
+ * This class is responsible for handling all incoming and outgoing network traffic.
+ * It is a singleton, so there can only be one instance of it.
+ */
 class RTYPE_SRV_API Gateway final : public utils::Singleton<Gateway>
 {
         friend class Singleton;
 
     public:
+        /**
+         * @brief Starts the server.
+         */
         void startServer() noexcept;
+
+        /**
+         * @brief Initializes the server.
+         * @param tcp_endpoint The TCP endpoint to use.
+         * @param quit_server A pointer to an atomic boolean that will be set to true when the server should quit.
+         */
         void initServer(const network::Endpoint &tcp_endpoint, std::atomic<bool> &quit_server);
 
     protected:
@@ -67,9 +107,9 @@ class RTYPE_SRV_API Gateway final : public utils::Singleton<Gateway>
         ~Gateway() noexcept = default;
 
     private:
-        static constexpr uint8_t MAX_PARSE_ERRORS = 3;
-        static constexpr size_t MAX_BUFFER_SIZE = 64 * 1024;
-        static constexpr auto OCCUPANCY_INTERVAL = std::chrono::seconds(60);
+        static constexpr uint8_t MAX_PARSE_ERRORS = 3; ///< The maximum number of parse errors before a client is disconnected.
+        static constexpr size_t MAX_BUFFER_SIZE = 64 * 1024; ///< The maximum buffer size for a client.
+        static constexpr auto OCCUPANCY_INTERVAL = std::chrono::seconds(60); ///< The interval at which to send occupancy requests.
 
         using clock = std::chrono::steady_clock;
         using IP = std::pair<std::array<uint8_t, 16>, uint16_t>;

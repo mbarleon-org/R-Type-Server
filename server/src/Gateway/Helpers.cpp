@@ -5,6 +5,11 @@
 #include <RTypeSrv/Utils/Logger.hpp>
 #include <ranges>
 
+/**
+ * @brief Disconnects a client by its handle.
+ *
+ * @param handle The handle of the client to disconnect.
+ */
 void rtype::srv::Gateway::_disconnectByHandle(const network::Handle &handle) noexcept
 {
     if (const auto it = std::ranges::find_if(_sockets, [handle](const auto &pair) { return pair.second.handle == handle; });
@@ -30,6 +35,9 @@ void rtype::srv::Gateway::_disconnectByHandle(const network::Handle &handle) noe
     }
 }
 
+/**
+ * @brief Accepts new clients.
+ */
 void rtype::srv::Gateway::_acceptClients() noexcept
 {
     try {

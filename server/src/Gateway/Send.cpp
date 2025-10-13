@@ -6,11 +6,19 @@
 
 namespace {
 
+/**
+ * @brief A buffer for sending data.
+ */
 struct SendBuf {
         std::vector<uint8_t> data;
         size_t offset = 0;
 };
 
+/**
+ * @brief Prepares a queue of buffers to be sent.
+ * @param bufs The buffers to prepare.
+ * @return A queue of buffers to be sent.
+ */
 std::deque<SendBuf> prepareSendQueue(std::vector<std::vector<uint8_t>> &bufs)
 {
     std::deque<SendBuf> sendQueue;
@@ -22,6 +30,11 @@ std::deque<SendBuf> prepareSendQueue(std::vector<std::vector<uint8_t>> &bufs)
     return sendQueue;
 }
 
+/**
+ * @brief Processes a queue of buffers to be sent.
+ * @param handle The handle of the recipient.
+ * @param sendQueue The queue of buffers to be sent.
+ */
 void processSendQueue(const rtype::network::Handle handle, std::deque<SendBuf> &sendQueue)
 {
     while (!sendQueue.empty()) {
@@ -40,6 +53,11 @@ void processSendQueue(const rtype::network::Handle handle, std::deque<SendBuf> &
     }
 }
 
+/**
+ * @brief Updates the send buffers with any remaining data that was not sent.
+ * @param sendQueue The queue of buffers that were sent.
+ * @param bufs The buffers to update.
+ */
 void updateSendBuffers(std::deque<SendBuf> &sendQueue, std::vector<std::vector<uint8_t>> &bufs)
 {
     for (auto &[data, offset] : sendQueue) {
@@ -52,6 +70,10 @@ void updateSendBuffers(std::deque<SendBuf> &sendQueue, std::vector<std::vector<u
 
 }// namespace
 
+/**
+ * @brief Sends packets to a client.
+ * @param i The index of the client in the `_fds` array.
+ */
 void rtype::srv::Gateway::_sendPackets(const network::NFDS i)
 {
     const auto handle = _fds[i].handle;
@@ -72,6 +94,9 @@ void rtype::srv::Gateway::_sendPackets(const network::NFDS i)
     updateSendBuffers(sendQueue, bufs);
 }
 
+/**
+ * @brief Sends occupancy requests to all registered game servers.
+ */
 void rtype::srv::Gateway::sendOccupancyRequests()
 {
     for (const auto &gs_key : _gs_registry | std::views::keys) {

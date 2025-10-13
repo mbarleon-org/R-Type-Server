@@ -10,6 +10,14 @@
 #include <RTypeSrv/Utils/Logger.hpp>
 #include <ranges>
 
+/**
+ * @brief Starts the server.
+ *
+ * This function is responsible for initializing the server and starting the main
+ * server loop. It should only be called once.
+ *
+ * @throws Exception if the server has not been initialized or is already running.
+ */
 void rtype::srv::Gateway::_startServer()
 {
     if (!_is_init) {
@@ -30,6 +38,11 @@ void rtype::srv::Gateway::_startServer()
     utils::cout("TCP server listening on ", utils::ipToStr(_tcp_endpoint.ip), ":", _tcp_endpoint.port, "...");
 }
 
+/**
+ * @brief Handles a client's request.
+ *
+ * @param i The index of the client in the `_fds` array.
+ */
 void rtype::srv::Gateway::_handleClients(network::NFDS &i) noexcept
 {
     try {
@@ -42,6 +55,11 @@ void rtype::srv::Gateway::_handleClients(network::NFDS &i) noexcept
     }
 }
 
+/**
+ * @brief Handles a client's send request.
+ *
+ * @param i The index of the client in the `_fds` array.
+ */
 void rtype::srv::Gateway::_handleClientsSend(network::NFDS &i) noexcept
 {
     try {
@@ -53,6 +71,11 @@ void rtype::srv::Gateway::_handleClientsSend(network::NFDS &i) noexcept
     }
 }
 
+/**
+ * @brief Handles a single iteration of the main server loop.
+ *
+ * @param i The index of the current file descriptor in the `_fds` array.
+ */
 void rtype::srv::Gateway::_handleLoop(network::NFDS &i) noexcept
 {
     if (_fds[i].revents & (POLLERR | POLLHUP | POLLNVAL)) {
@@ -71,6 +94,12 @@ void rtype::srv::Gateway::_handleLoop(network::NFDS &i) noexcept
     }
 }
 
+/**
+ * @brief The main server loop.
+ *
+ * This function is responsible for handling all incoming and outgoing network
+ * traffic. It will run until the `_quit_server` atomic boolean is set to true.
+ */
 void rtype::srv::Gateway::_serverLoop()
 {
     auto last_occupancy = clock::now();
@@ -90,6 +119,13 @@ void rtype::srv::Gateway::_serverLoop()
     }
 }
 
+/**
+ * @brief Cleans up the server's resources.
+ *
+ * This function is responsible for disconnecting all clients, clearing all
+ * internal data structures, and stopping the server. It should only be called
+ * once.
+ */
 void rtype::srv::Gateway::_cleanupServer()
 {
     for (auto &sock : _sockets | std::views::values) {
