@@ -41,13 +41,12 @@ file(GLOB_RECURSE SRC_R_TYPE_SERVER "core/src/*.cpp")
 add_executable(r-type_server ${SRC_R_TYPE_SERVER})
 target_include_directories(r-type_server PRIVATE
         ${CMAKE_SOURCE_DIR}/core/include
-        ${CMAKE_SOURCE_DIR}/ecs/include
         ${CMAKE_SOURCE_DIR}/server/include
         ${CMAKE_SOURCE_DIR}/network/include
 )
 
-add_subdirectory(ecs)
-target_link_libraries(r-type_server PRIVATE r-engine)
+# add_subdirectory(ecs)
+# target_link_libraries(r-type_server PRIVATE r-engine)
 
 add_subdirectory(server)
 target_link_libraries(r-type_server PRIVATE r-type_srv)

@@ -12,6 +12,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <functional>
 #include <thread>
 #include <unordered_map>
@@ -75,7 +76,7 @@ struct RTYPE_SRV_API array_hash {
                 hash ^= std::hash<T>{}(elem) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
             }
             return hash;
-        };
+        }
 };
 
 /**
