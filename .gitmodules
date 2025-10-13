@@ -2,3 +2,8 @@
 	path = network
 	url = git@github.com:mbarleon-org/R-Type-Network.git
 	branch = main
+[submodule "ecs"]
+	path = ecs
+	url = https://github.com/Leorevoir/R-Engine.git
+	branch = main
+
