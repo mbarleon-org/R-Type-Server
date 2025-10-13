@@ -48,14 +48,12 @@ jobs:
           ninja --version
 
       - name: Check & run build.sh (Linux)
-        if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
           test -f build.sh || { echo "::error ::/!\\ WARNING NO build.sh FOUND /!\\"; exit 84; }
           chmod +x build.sh
           ./build.sh
 
       - name: Check executable (Linux)
-        if: ${{ matrix.os == 'ubuntu-latest' }}
         env:
           EXECUTABLE_PATH: ${{ vars.EXECUTABLE_PATH }}
         run: |
@@ -73,7 +71,6 @@ jobs:
           fi
 
       - name: Check required libraries on Linux
-        if: ${{ matrix.os == 'ubuntu-latest' }}
         env:
           REQUIRED_LIBS: ${{ vars.REQUIRED_LIBS }}
         run: |
