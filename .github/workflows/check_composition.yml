@@ -80,7 +80,13 @@ jobs:
             found=0
             for ext in so a; do
               if [ -f "lib${lib}.${ext}" ]; then
-                echo "::notice file=lib${lib}.${ext}::Found $lib (${ext})"
+                path="lib${lib}.${ext}"
+              elif [ -f "build/lib/lib${lib}.${ext}" ]; then
+                path="build/lib/lib${lib}.${ext}"
+              fi
+
+              if [ -n "${path:-}" ]; then
+                echo "::notice file=${path}::Found $lib (${ext})"
                 found=1
               fi
             done
