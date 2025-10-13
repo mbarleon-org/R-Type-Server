@@ -12,29 +12,16 @@ defaults:
 
 jobs:
   check_program_compilation:
-    name: Build & check (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    runs-on: [self-hosted, Linux, X64, sandbox]
     timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ${{ fromJSON(vars.ENABLE_MACOS == 'true'
-          && '["ubuntu-latest","windows-latest","macos-latest"]'
-          || '["ubuntu-latest","windows-latest"]') }}
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Show runner info
-        run: |
-          echo "Runner OS: $RUNNER_OS"
-          uname -a || true
-          bash --version | head -n 1 || true
+      - name: Install C dependencies
+        uses: mbarleon-org/install-c-deps@v1
 
-      # ---------- LINUX ----------
-      - name: Ensure cmake & ninja (Ubuntu)
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+      - name: Ensure cmake & ninja (Linux)
         run: |
           set -e
           HAVE_CMAKE=0
@@ -60,15 +47,13 @@ jobs:
           cmake --version | head -n1
           ninja --version
 
-      - name: Check & run build.sh (Ubuntu)
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+      - name: Check & run build.sh (Linux)
         run: |
           test -f build.sh || { echo "::error ::/!\\ WARNING NO build.sh FOUND /!\\"; exit 84; }
           chmod +x build.sh
           ./build.sh
 
-      - name: Check executable (Ubuntu)
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+      - name: Check executable (Linux)
         env:
           EXECUTABLE_PATH: ${{ vars.EXECUTABLE_PATH }}
         run: |
@@ -86,7 +71,6 @@ jobs:
           fi
 
       - name: Check required libraries on Linux
-        if: ${{ matrix.os == 'ubuntu-latest' }}
         env:
           REQUIRED_LIBS: ${{ vars.REQUIRED_LIBS }}
         run: |
@@ -103,156 +87,3 @@ jobs:
               exit 84
             fi
           done
-
-      # ---------- MACOS ----------
-      - name: Ensure cmake & ninja (macOS)
-        if: ${{ matrix.os == 'macos-latest' }}
-        run: |
-          set -e
-          HAVE_CMAKE=0
-          HAVE_NINJA=0
-          command -v cmake >/dev/null 2>&1 && HAVE_CMAKE=1
-          command -v ninja >/dev/null 2>&1 && HAVE_NINJA=1
-          if [ "$HAVE_CMAKE" = 1 ] && [ "$HAVE_NINJA" = 1 ]; then
-            echo "::notice::cmake and ninja already available:"
-            cmake --version | head -n1
-            ninja --version
-            exit 0
-          fi
-
-          if ! command -v brew >/dev/null 2>&1; then
-            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-            eval "$(/opt/homebrew/bin/brew shellenv)" || true
-            eval "$(/usr/local/bin/brew shellenv)" || true
-          fi
-          brew update
-          brew install cmake ninja
-          echo "::notice::$(cmake --version | head -n1)"
-          echo "::notice::$(ninja --version)"
-
-      - name: Check & run build.sh (macOS)
-        if: ${{ matrix.os == 'macos-latest' }}
-        run: |
-          test -f build.sh || { echo "::error ::/!\\ WARNING NO build.sh FOUND /!\\"; exit 84; }
-          chmod +x build.sh
-          ./build.sh
-
-      - name: Check executable (macOS)
-        if: ${{ matrix.os == 'macos-latest' }}
-        env:
-          EXECUTABLE_PATH: ${{ vars.EXECUTABLE_PATH }}
-        run: |
-          executable="${EXECUTABLE_PATH}"
-          if [ -z "$executable" ]; then
-            echo "::error ::EXECUTABLE_PATH is not set."
-            exit 84
-          fi
-          if [ -x "$executable" ] || [ -f "$executable" ]; then
-            echo "::notice file=$executable::Executable found."
-          else
-            echo "::error file=$executable::Executable missing."
-            ls -la
-            exit 84
-          fi
-
-      - name: Check required libraries on macOS
-        if: ${{ matrix.os == 'macos-latest' }}
-        env:
-          REQUIRED_LIBS: ${{ vars.REQUIRED_LIBS }}
-        run: |
-          for lib in $REQUIRED_LIBS; do
-            found=0
-            for ext in dylib a; do
-              if [ -f "lib${lib}.${ext}" ]; then
-                echo "::notice file=lib${lib}.${ext}::Found $lib (${ext})"
-                found=1
-              fi
-            done
-            if [ $found -eq 0 ]; then
-              echo "::error file=lib${lib}::Missing $lib"
-              exit 84
-            fi
-          done
-
-      # ---------- WINDOWS ----------
-      - name: Set up MSVC environment
-        if: ${{ matrix.os == 'windows-latest' }}
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Ensure cmake & ninja (Windows)
-        if: ${{ matrix.os == 'windows-latest' }}
-        shell: pwsh
-        run: |
-          if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
-            choco install cmake --yes --no-progress --installargs "ADD_CMAKE_TO_PATH=System"
-          }
-          if (-not (Get-Command ninja -ErrorAction SilentlyContinue)) {
-            # Package id is 'ninja'
-            choco install ninja --yes --no-progress
-          }
-          cmake --version | Select-Object -First 1
-          ninja  --version
-
-      - name: Run build.ps1 if present, else build.sh (Windows)
-        if: ${{ matrix.os == 'windows-latest' }}
-        shell: pwsh
-        run: |
-          if (Test-Path ./build.ps1) {
-            Write-Host "::notice file=build.ps1::Running build.ps1…"
-            pwsh -NoProfile -ExecutionPolicy Bypass -File ./build.ps1
-            if ($LASTEXITCODE -ne 0) { exit 84 }
-          } elseif (Test-Path ./build.sh) {
-            Write-Host "::notice file=build.sh::Running build.sh via Git Bash…"
-            bash ./build.sh
-            if ($LASTEXITCODE -ne 0) { exit 84 }
-          } else {
-            Write-Host "::error ::/!\ NO build.ps1 OR build.sh FOUND /!\"
-            exit 84
-          }
-
-      - name: Check executable (.exe) on Windows
-        if: ${{ matrix.os == 'windows-latest' }}
-        shell: pwsh
-        env:
-          EXECUTABLE_PATH: ${{ vars.EXECUTABLE_PATH }}
-        run: |
-          $exe = $env:EXECUTABLE_PATH
-          if ([string]::IsNullOrWhiteSpace($exe)) {
-            Write-Host "::error ::EXECUTABLE_PATH is not set."
-            exit 84
-          }
-          $exeWithExt = ($exe.ToLower().EndsWith(".exe")) ? $exe : "$exe.exe"
-          if (Test-Path -Path $exeWithExt -PathType Leaf) {
-            Write-Host "::notice file=$exeWithExt::Executable found (.exe)."
-            exit 0
-          }
-          if (Test-Path -Path $exe -PathType Leaf) {
-            Write-Host "::notice file=$exe::Executable found (no extension)."
-            exit 0
-          }
-          Write-Host "::error file=$exeWithExt::Executable not found (checked '$exeWithExt' and '$exe')."
-          Get-ChildItem -Recurse -File | Select-Object -First 200 | Format-Table FullName,Length,LastWriteTime
-          exit 84
-
-      - name: Check required libraries on Windows
-        if: ${{ matrix.os == 'windows-latest' }}
-        shell: pwsh
-        env:
-          REQUIRED_LIBS: ${{ vars.REQUIRED_LIBS }}
-        run: |
-          $libs = $env:REQUIRED_LIBS -split ' '
-          $extensions = @('dll')
-          foreach ($lib in $libs) {
-            $found = $false
-            foreach ($ext in $extensions) {
-              if (Test-Path "$lib.$ext") {
-                Write-Host "::notice file=lib$lib.$ext::Found $lib ($ext)"
-                $found = $true
-              }
-            }
-            if (-not $found) {
-              Write-Host "::error file=$lib::Missing $lib"
-              Get-ChildItem -Recurse -File | Select-Object -First 200 | Format-Table FullName,Length,LastWriteTime
-              exit 84
-            }
-          }

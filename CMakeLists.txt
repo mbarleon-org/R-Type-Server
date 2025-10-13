@@ -47,7 +47,7 @@ target_include_directories(r-type_server PRIVATE
 )
 
 add_subdirectory(ecs)
-target_link_libraries(r-type_server PRIVATE r-type_ecs)
+target_link_libraries(r-type_server PRIVATE r-engine)
 
 add_subdirectory(server)
 target_link_libraries(r-type_server PRIVATE r-type_srv)
