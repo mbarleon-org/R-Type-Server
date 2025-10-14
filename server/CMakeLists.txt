@@ -10,6 +10,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
+
 if (UNIX AND NOT APPLE)
     set(CMAKE_SKIP_BUILD_RPATH FALSE)
     set(CMAKE_SKIP_INSTALL_RPATH FALSE)
@@ -38,16 +40,39 @@ endif ()
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-file(GLOB_RECURSE SRC_R_TYPE_NETWORK_CORE "src/*.cpp")
-add_library(r-type_srv SHARED ${SRC_R_TYPE_NETWORK_CORE})
+file(GLOB_RECURSE SRC_R_TYPE_SERVER "src/*.cpp")
+add_library(r-type_srv SHARED ${SRC_R_TYPE_SERVER})
 target_include_directories(r-type_srv PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../network/include
 )
-
 target_link_libraries(r-type_srv PUBLIC r-type_network)
-
 target_compile_definitions(r-type_srv PRIVATE R_TYPE_SRV_BUILD=1)
+
+find_package(Criterion REQUIRED)
+file(GLOB TEST_SRC tests/test_*.cpp)
+add_executable(rtype_srv_unit_tests ${TEST_SRC})
+target_link_libraries(rtype_srv_unit_tests PRIVATE r-type_srv Criterion::Criterion)
+target_include_directories(rtype_srv_unit_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../network/include
+)
+
+function(enable_coverage_flags tgt)
+    if(APPLE)
+        target_compile_options(${tgt} PRIVATE -fprofile-instr-generate -fcoverage-mapping)
+        target_link_options(${tgt} PRIVATE -fprofile-instr-generate -Wl,-u,___llvm_profile_runtime)
+    endif()
+endfunction()
+
+option(ENABLE_TESTS "Enable test macros and flags" OFF)
+if(ENABLE_TESTS)
+    enable_coverage_flags(r-type_srv)
+    enable_coverage_flags(rtype_srv_unit_tests)
+
+    enable_testing()
+    add_test(NAME rtype_srv_unit_tests COMMAND rtype_srv_unit_tests)
+endif()
 
 function(enable_strict_warnings tgt)
     if (MSVC)
@@ -85,6 +110,7 @@ function(enable_strict_warnings tgt)
 endfunction()
 
 enable_strict_warnings(r-type_srv)
+enable_strict_warnings(rtype_srv_unit_tests)
 
 option(ENABLE_DEBUG "Enable debug macros and flags" OFF)
 if (ENABLE_DEBUG)

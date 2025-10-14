@@ -5,6 +5,40 @@
 #include <stdexcept>
 
 /**
+ * @brief Parses and validates the header of a packet from the given data buffer.
+ *
+ * This function reads and validates the header fields from the provided data buffer,
+ * updating the offset as it consumes bytes. It checks for the correct magic number
+ * and version range, throwing exceptions if the header is incomplete or invalid.
+ *
+ * @param data Pointer to the buffer containing the packet data.
+ * @param offset Reference to the current offset in the buffer; will be updated as bytes are read.
+ * @param bufsize Total size of the buffer.
+ * @return std::uint8_t The header value extracted from the buffer.
+ * @throws std::runtime_error If the header is incomplete, the magic number is invalid, or the version is out of range.
+ */
+std::uint8_t rtype::srv::Gateway::getHeader(const uint8_t *data, std::size_t &offset, std::size_t bufsize)
+{
+    // Need at least magic (2) + version (1) + packet id (1) available to validate header
+    if (offset + 4 > bufsize) {
+        throw std::runtime_error("Incomplete Header");
+    }
+    // Read magic and version, consume them. Do NOT consume packet id; leave it for handlers.
+    if (getNextVal<std::uint16_t>(data, offset, bufsize) != HEADER_MAGIC) {
+        throw std::runtime_error("Invalid magic number");
+    }
+    std::uint8_t ver = getNextVal<std::uint8_t>(data, offset, bufsize);
+    if (ver < MINIMUM_VERSION || ver > MAXIMUM_VERSION) {
+        throw std::runtime_error("Invalid version");
+    }
+    // Packet id is the next byte but do not advance offset here; return its value.
+    if (offset >= bufsize) {
+        throw std::runtime_error("Incomplete Header (no packet id)");
+    }
+    return data[offset];
+}
+
+/**
  * @brief Sets the POLLOUT flag for a given handle.
  * @param h The handle to set the POLLOUT flag for.
  */
@@ -91,7 +125,7 @@ std::pair<std::array<uint8_t, 16>, uint16_t> rtype::srv::Gateway::parseGSKey(con
 {
     std::array<uint8_t, 16> ip{};
     std::memcpy(ip.data(), data + offset, 16);
-    uint16_t port = static_cast<uint16_t>((data[offset + 16] << 8) | data[offset + 17]);
+    uint16_t port = static_cast<uint16_t>((data[offset + 16]) << 8 | data[offset + 17]);
     return {ip, port};
 }
 
@@ -236,14 +270,14 @@ std::vector<uint8_t> rtype::srv::Gateway::buildJoinMsgForGS(const std::array<uin
 {
     std::vector<uint8_t> join_msg;
     join_msg.reserve(23);
-    join_msg.emplace_back(2);
+    join_msg.push_back(static_cast<uint8_t>(2));
     join_msg.insert(join_msg.end(), ip.begin(), ip.end());
-    join_msg.emplace_back(static_cast<uint8_t>(port >> 8));
-    join_msg.emplace_back(static_cast<uint8_t>(port & 0xFF));
-    join_msg.emplace_back(static_cast<uint8_t>((id >> 24) & 0xFF));
-    join_msg.emplace_back(static_cast<uint8_t>((id >> 16) & 0xFF));
-    join_msg.emplace_back(static_cast<uint8_t>((id >> 8) & 0xFF));
-    join_msg.emplace_back(static_cast<uint8_t>(id & 0xFF));
+    join_msg.push_back(static_cast<uint8_t>(port >> 8));
+    join_msg.push_back(static_cast<uint8_t>(port & 0xFF));
+    join_msg.push_back(static_cast<uint8_t>((id >> 24) & 0xFF));
+    join_msg.push_back(static_cast<uint8_t>((id >> 16) & 0xFF));
+    join_msg.push_back(static_cast<uint8_t>((id >> 8) & 0xFF));
+    join_msg.push_back(static_cast<uint8_t>(id & 0xFF));
     return join_msg;
 }
 
@@ -315,7 +349,7 @@ std::pair<rtype::srv::Gateway::IP, uint8_t> rtype::srv::Gateway::parseOccupancy(
 {
     std::array<uint8_t, 16> ip{};
     std::memcpy(ip.data(), data + offset, 16);
-    uint16_t port = static_cast<uint16_t>((data[offset + 16] << 8) | data[offset + 17]);
+    uint16_t port = static_cast<uint16_t>(data[offset + 16] << 8 | data[offset + 17]);
     uint8_t occ = data[offset + 18];
     return {{ip, port}, occ};
 }
@@ -347,7 +381,11 @@ void rtype::srv::Gateway::_parsePackets()
         std::size_t offset = 0;
         while (offset < buf.size()) {
             try {
-                switch (buf[offset]) {
+                // Validate header (consumes magic+version) and get packet id (without consuming it)
+                const uint8_t pkt = getHeader(buf.data(), offset, buf.size());
+                // Now pkt == buf[offset] (packet id). Advance past packet id so handlers see payload at offset+... as before.
+                // We'll leave offset as-is and handlers that expect packet id at offset+1 will continue to work.
+                switch (pkt) {
                     case 0:
                     case 1:
                         handleOKKO(handle, buf.data(), offset, buf.size());

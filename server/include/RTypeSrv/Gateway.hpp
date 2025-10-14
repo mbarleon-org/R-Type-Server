@@ -12,11 +12,22 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <optional>
 #include <functional>
+#include <optional>
 #include <thread>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
+
+#ifndef RTYPE_SRV_HOST_LITTLE_ENDIAN
+    #if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+        #define RTYPE_SRV_HOST_LITTLE_ENDIAN 1
+    #elif defined(_WIN32) || defined(__LITTLE_ENDIAN__) || defined(__i386__) || defined(__x86_64__)
+        #define RTYPE_SRV_HOST_LITTLE_ENDIAN 1
+    #else
+        #define RTYPE_SRV_HOST_LITTLE_ENDIAN 0
+    #endif
+#endif
 
 /**
  * @brief A hash function for std::array<unsigned char, 16>.
@@ -107,9 +118,13 @@ class RTYPE_SRV_API Gateway final : public utils::Singleton<Gateway>
         ~Gateway() noexcept = default;
 
     private:
-        static constexpr uint8_t MAX_PARSE_ERRORS = 3; ///< The maximum number of parse errors before a client is disconnected.
-        static constexpr size_t MAX_BUFFER_SIZE = 64 * 1024; ///< The maximum buffer size for a client.
-        static constexpr auto OCCUPANCY_INTERVAL = std::chrono::seconds(60); ///< The interval at which to send occupancy requests.
+        static constexpr uint8_t MINIMUM_VERSION = 0b1;
+        static constexpr uint8_t MAXIMUM_VERSION = 0b1;
+        static constexpr uint16_t HEADER_MAGIC = 0x4257;
+        static constexpr bool HOST_IS_LITTLE_ENDIAN = (RTYPE_SRV_HOST_LITTLE_ENDIAN != 0);
+        static constexpr uint8_t MAX_PARSE_ERRORS = 3;      ///< The maximum number of parse errors before a client is disconnected.
+        static constexpr size_t MAX_BUFFER_SIZE = 64 * 1024;///< The maximum buffer size for a client.
+        static constexpr auto OCCUPANCY_INTERVAL = std::chrono::seconds(60);///< The interval at which to send occupancy requests.
 
         using clock = std::chrono::steady_clock;
         using IP = std::pair<std::array<uint8_t, 16>, uint16_t>;
@@ -140,6 +155,7 @@ class RTYPE_SRV_API Gateway final : public utils::Singleton<Gateway>
         void _disconnectByHandle(const network::Handle &handle) noexcept;
 
         void setPolloutForHandle(network::Handle h) noexcept;
+        std::uint8_t getHeader(const uint8_t *data, std::size_t &offset, std::size_t bufsize);
         void handleGID(network::Handle handle, const uint8_t *data, size_t &offset, size_t bufsize);
         void handleJoin(network::Handle handle, const uint8_t *data, size_t &offset, size_t bufsize);
         void handleCreate(network::Handle handle, const uint8_t *data, size_t &offset, size_t bufsize);
@@ -176,6 +192,38 @@ class RTYPE_SRV_API Gateway final : public utils::Singleton<Gateway>
         OccupancyCacheType _occupancy_cache;
         GsAddrToHandleType _gs_addr_to_handle;
         std::atomic<bool> *_quit_server = nullptr;
+
+        /**
+         * @brief Extracts the next integral value of type T from a byte buffer.
+         *
+         * This function reads a value of type T from the given data buffer starting at the specified offset,
+         * ensuring that the read does not exceed the buffer size. The offset is incremented by the size of T
+         * after a successful read. If the read would go out of bounds, a std::runtime_error is thrown with the
+         * provided error message.
+         *
+         * @tparam T An integral type to extract from the buffer.
+         * @param data Pointer to the byte buffer.
+         * @param offset Reference to the current offset in the buffer; will be updated after reading.
+         * @param bufsize Total size of the buffer.
+         * @param error_msg Optional error message for exception if the read is out of bounds.
+         * @return The extracted value of type T.
+         * @throws std::runtime_error If there is not enough data left in the buffer to read a value of type T.
+         */
+        template<typename T>
+        requires std::is_integral_v<T>
+        static T getNextVal(const uint8_t *data, std::size_t &offset, std::size_t bufsize, const std::string &error_msg = "Invalid value")
+        {
+            std::size_t s = sizeof(T);
+            if (offset + s > bufsize) {
+                throw std::runtime_error(error_msg);
+            }
+            T val = 0;
+            for (std::size_t i = 0; i < s; ++i) {
+                val = static_cast<T>((val << 8) | data[offset + i]);
+            }
+            offset += s;
+            return val;
+        }
 };
 
 }// namespace rtype::srv

@@ -78,26 +78,25 @@ function _tests_run()
     mkdir -p build
     cd build || _error "mkdir failed" "could not cd into build/"
     _info "configuring tests with CMake (Ninja, Debug)..."
-    cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+    cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Debug -DENABLE_TESTS=ON \
         || _error "cmake configuration failed" "check CMake output above"
 
-    _info "building unit tests (zap_srv_unit_tests)…"
-    if ! ninja -j"$(_cpus)" zap_srv_unit_tests; then
-        _error "unit tests compilation error" "failed to compile zap_srv_unit_tests"
+    _info "building unit tests (rtype_srv_unit_tests)…"
+    if ! ninja -j"$(_cpus)" rtype_srv_unit_tests; then
+        _error "unit tests compilation error" "failed to compile rtype_srv_unit_tests"
     fi
     cd .. || _error "cd failed" "could not cd .."
 
     _info "running unit tests…"
-    if ! ./build/zap_srv_unit_tests; then
+    if ! ./rtype_srv_unit_tests; then
         _error "unit tests error" "unit tests failed!"
     fi
     _success "unit tests succeed!"
 
     if [ "$(uname -s)" == 'Darwin' ]; then
         _info "generating coverage (llvm-cov)…"
-        cd build || _error "cd failed"
-        xcrun llvm-profdata merge -sparse zap_srv_unit_tests-*.profraw -o zap_srv_unit_tests.profdata
-        xcrun llvm-cov report ./zap_srv_unit_tests -instr-profile=zap_srv_unit_tests.profdata -ignore-filename-regex='.*/tests/.*' -enable-name-compression > ../code_coverage.txt
+        xcrun llvm-profdata merge -sparse unit_tests-*.profraw -o unit_tests.profdata
+        xcrun llvm-cov report ./rtype_srv_unit_tests -instr-profile=unit_tests.profdata -object ./lib*.dylib -ignore-filename-regex='.*/tests/.*' -enable-name-compression > ../code_coverage.txt
         cd ..
     else
         if command -v gcovr >/dev/null 2>&1; then
@@ -121,7 +120,8 @@ function _fclean()
     _clean
     rm -rf r-type_ecs \
         *.so *.dylib *.dll *.lib *.exp *.a \
-        r-type_server r-type_server.exe unit_tests plugins code_coverage.txt unit_tests-*.profraw unit_tests.profdata vgcore* cmake-build-debug
+        rtype_srv_unit_tests rtype_srv_unit_tests.exe r-type_server r-type_server.exe \
+        unit_tests plugins code_coverage.txt unit_tests-*.profraw unit_tests.profdata vgcore* cmake-build-debug
 }
 
 if [ $# -eq 0 ]; then

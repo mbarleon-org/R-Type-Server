@@ -112,7 +112,8 @@ function Invoke-FClean() {
     $paths = @(
         "r-type_ecs",
         "*.so","*.dylib", "*.dll","*.lib","*.a","*.exp",
-        "r-type_server","r-type_server.exe","unit_tests","plugins","code_coverage.txt",
+        "rtype_srv_unit_tests","rtype_srv_unit_tests.exe","r-type_server",
+        "r-type_server.exe","unit_tests","plugins","code_coverage.txt",
         "unit_tests-*.profraw","unit_tests.profdata","vgcore*","cmake-build-debug"
     )
     foreach ($p in $paths) { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $p }
