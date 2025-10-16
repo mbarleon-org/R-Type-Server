@@ -118,6 +118,8 @@ class RTYPE_SRV_API Gateway final : public utils::Singleton<Gateway>
         ~Gateway() noexcept = default;
 
     private:
+        class PacketParser;
+
         static constexpr uint8_t MINIMUM_VERSION = 0b1;
         static constexpr uint8_t MAXIMUM_VERSION = 0b1;
         static constexpr uint16_t HEADER_MAGIC = 0x4257;
@@ -155,25 +157,18 @@ class RTYPE_SRV_API Gateway final : public utils::Singleton<Gateway>
         void _disconnectByHandle(const network::Handle &handle) noexcept;
 
         void setPolloutForHandle(network::Handle h) noexcept;
-        std::uint8_t getHeader(const uint8_t *data, std::size_t &offset, std::size_t bufsize);
         void handleGID(network::Handle handle, const uint8_t *data, size_t &offset, size_t bufsize);
         void handleJoin(network::Handle handle, const uint8_t *data, size_t &offset, size_t bufsize);
         void handleCreate(network::Handle handle, const uint8_t *data, size_t &offset, size_t bufsize);
         void handleOccupancy(network::Handle handle, const uint8_t *data, size_t &offset, size_t bufsize);
-        static void handleOKKO(network::Handle handle, const uint8_t *data, size_t &offset, size_t bufsize);
+        static void handleKO(network::Handle handle, const uint8_t *data, size_t &offset, size_t bufsize);
+        static void handleOK(network::Handle handle, const uint8_t *data, size_t &offset, size_t bufsize);
         void handleGSRegistration(network::Handle handle, const uint8_t *data, size_t &offset, size_t bufsize);
 
         void sendErrorResponse(network::Handle handle);
-        static uint32_t extractGameId(const uint8_t *data) noexcept;
-        static std::vector<uint8_t> buildCreateMsg(uint8_t gametype);
         std::optional<GsRegistryType::iterator> findLeastOccupiedGS();
         [[nodiscard]] network::Handle getGSHandle(const IP &gs_key) const;
-        static std::pair<IP, uint8_t> parseOccupancy(const uint8_t *data, std::size_t offset);
         [[nodiscard]] std::optional<IP> findGSKeyByHandle(network::Handle handle) const noexcept;
-        static std::vector<uint8_t> buildJoinMsgForClient(const uint8_t *data, std::size_t offset);
-        static std::vector<uint32_t> parseGIDs(const uint8_t *data, std::size_t start, std::size_t bufsize);
-        static std::pair<std::array<uint8_t, 16>, uint16_t> parseGSKey(const uint8_t *data, std::size_t offset);
-        [[nodiscard]] static std::vector<uint8_t> buildJoinMsgForGS(const std::array<uint8_t, 16> &ip, uint16_t port, uint32_t id);
 
         FdsType _fds;
         bool _is_init = false;
@@ -192,41 +187,11 @@ class RTYPE_SRV_API Gateway final : public utils::Singleton<Gateway>
         OccupancyCacheType _occupancy_cache;
         GsAddrToHandleType _gs_addr_to_handle;
         std::atomic<bool> *_quit_server = nullptr;
-
-        /**
-         * @brief Extracts the next integral value of type T from a byte buffer.
-         *
-         * This function reads a value of type T from the given data buffer starting at the specified offset,
-         * ensuring that the read does not exceed the buffer size. The offset is incremented by the size of T
-         * after a successful read. If the read would go out of bounds, a std::runtime_error is thrown with the
-         * provided error message.
-         *
-         * @tparam T An integral type to extract from the buffer.
-         * @param data Pointer to the byte buffer.
-         * @param offset Reference to the current offset in the buffer; will be updated after reading.
-         * @param bufsize Total size of the buffer.
-         * @param error_msg Optional error message for exception if the read is out of bounds.
-         * @return The extracted value of type T.
-         * @throws std::runtime_error If there is not enough data left in the buffer to read a value of type T.
-         */
-        template<typename T>
-        requires std::is_integral_v<T>
-        static T getNextVal(const uint8_t *data, std::size_t &offset, std::size_t bufsize, const std::string &error_msg = "Invalid value")
-        {
-            std::size_t s = sizeof(T);
-            if (offset + s > bufsize) {
-                throw std::runtime_error(error_msg);
-            }
-            T val = 0;
-            for (std::size_t i = 0; i < s; ++i) {
-                val = static_cast<T>((val << 8) | data[offset + i]);
-            }
-            offset += s;
-            return val;
-        }
 };
 
 }// namespace rtype::srv
+
+#include <RTypeSrv/GatewayPacketParser.hpp>
 
 #if defined(_MSC_VER)
     #pragma warning(pop)
