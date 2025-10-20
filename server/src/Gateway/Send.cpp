@@ -1,7 +1,10 @@
 #include <RTypeNet/Send.hpp>
 #include <RTypeSrv/Gateway.hpp>
+#include <RTypeSrv/Utils/Logger.hpp>
 #include <deque>
+#include <iomanip>
 #include <ranges>
+#include <sstream>
 #include <utility>
 
 namespace {
@@ -40,6 +43,17 @@ void processSendQueue(const rtype::network::Handle handle, std::deque<SendBuf> &
     while (!sendQueue.empty()) {
         auto &[data, offset] = sendQueue.front();
         const size_t to_send = data.size() - offset;
+        {
+            std::ostringstream ss;
+            ss << std::hex << std::setfill('0');
+            const size_t show = std::min<size_t>(data.size() - offset, 64);
+            for (size_t i = 0; i < show; ++i) {
+                ss << std::setw(2) << static_cast<int>(data[offset + i]);
+                if (i + 1 < show)
+                    ss << ' ';
+            }
+            rtype::srv::utils::clog("OUT TCP handle=", handle, " len=", data.size() - offset, " hex=", ss.str());
+        }
         const ssize_t sent = rtype::network::send(handle, data.data() + offset, static_cast<rtype::network::BufLen>(to_send), 0);
         if (sent < 0) {
             break;
@@ -96,14 +110,20 @@ void rtype::srv::Gateway::_sendPackets(const network::NFDS i)
 
 /**
  * @brief Sends occupancy requests to all registered game servers.
+ *
+ * Note: According to the protocol specification, OCCUPANCY packets are sent
+ * BY game servers TO the gateway, not requested by the gateway.
+ * This function may not be necessary if game servers send periodic updates.
+ *
+ * Currently sending GS_OK as a keepalive/ping - this may need revision.
  */
 void rtype::srv::Gateway::sendOccupancyRequests()
 {
     for (const auto &gs_key : _gs_registry | std::views::keys) {
         if (auto it = _gs_addr_to_handle.find(gs_key); it != _gs_addr_to_handle.end()) {
             network::Handle gs_handle = it->second;
-            std::vector<uint8_t> occ_req = {21};
-            _send_spans[gs_handle].push_back(std::move(occ_req));
+            std::vector<uint8_t> keepalive = rtype::srv::Gateway::PacketParser::buildSimpleResponse(21);
+            _send_spans[gs_handle].push_back(std::move(keepalive));
         }
     }
 }

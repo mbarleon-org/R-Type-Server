@@ -4,6 +4,8 @@
 #include <cerrno>
 #include <deque>
 #include <ranges>
+#include <iomanip>
+#include <sstream>
 #include <utility>
 
 rtype::network::Endpoint rtype::srv::GameServer::GetEndpointFromHandle(const network::Handle &handle)
@@ -41,6 +43,18 @@ void rtype::srv::GameServer::_sendPackets(const network::NFDS i)
     const network::Endpoint &client_endpoint = client_it->second;
     for (auto &buf : bufs) {
         if (!buf.empty()) {
+            {
+                std::ostringstream ss;
+                ss << std::hex << std::setfill('0');
+                const size_t len = buf.size();
+                const size_t show = std::min<size_t>(len, 64);
+                for (size_t j = 0; j < show; ++j) {
+                    ss << std::setw(2) << static_cast<int>(buf[j]);
+                    if (j + 1 < show)
+                        ss << ' ';
+                }
+                rtype::srv::utils::clog("OUT UDP handle=", handle, " len=", len, " hex=", ss.str());
+            }
             const ssize_t sent =
                 rtype::network::sendto(handle, buf.data(), static_cast<rtype::network::BufLen>(buf.size()), 0, client_endpoint);
             if (sent < 0) {

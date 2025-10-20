@@ -1,10 +1,13 @@
 #include <RTypeNet/Recv.hpp>
 #include <RTypeNet/Send.hpp>
 #include <RTypeSrv/GameServer.hpp>
+#include <RTypeSrv/GameServerPacketParser.hpp>
 #include <RTypeSrv/Utils/Logger.hpp>
 #include <cerrno>
 #include <cstring>
 #include <deque>
+#include <iomanip>
+#include <sstream>
 
 #if !defined(_WIN32)
     #include <netinet/in.h>
@@ -119,17 +122,21 @@ void rtype::srv::GameServer::_parseTcpPackets()
     std::size_t offset = 0;
     while (offset < buf.size()) {
         try {
-            switch (buf[offset]) {
-                case 0:
-                case 1:
-                    _handleGatewayOKKO(buf.data(), offset, buf.size());
-                    break;
+            uint8_t cmd = GameServerPacketParser::parseHeader(buf.data(), offset, buf.size());
+
+            switch (cmd) {
                 case 21:
+                case 22:
+                    _handleGatewayOKKO(cmd, buf.data(), offset, buf.size());
+                    break;
+                case 23:
                     _handleOccupancyRequest(buf.data(), offset, buf.size());
                     break;
+                case 3:
+                    handleCreate(_tcp_handle, buf.data(), offset, buf.size());
+                    break;
                 default:
-                    utils::cerr("Unknown packet type from TCP gateway: ", static_cast<int>(buf[offset]));
-                    offset++;
+                    utils::cerr("Unknown packet type from TCP gateway: ", static_cast<int>(cmd));
                     break;
             }
         } catch (const std::exception &e) {
@@ -144,13 +151,7 @@ void rtype::srv::GameServer::_parseTcpPackets()
 
 void rtype::srv::GameServer::_sendGSRegistration()
 {
-    std::vector<uint8_t> packet;
-
-    packet.push_back(20);
-    packet.insert(packet.end(), _base_endpoint.ip.begin(), _base_endpoint.ip.end());
-    const uint16_t port_be = htons(_base_endpoint.port);
-    const auto port_bytes = reinterpret_cast<const uint8_t *>(&port_be);
-    packet.insert(packet.end(), port_bytes, port_bytes + 2);
+    std::vector<uint8_t> packet = GameServerPacketParser::buildGSRegistration(_base_endpoint.ip, _base_endpoint.port);
     _tcp_send_spans[_tcp_handle].push_back(std::move(packet));
     for (auto &fd : _fds) {
         if (fd.handle == _tcp_handle) {
@@ -161,17 +162,15 @@ void rtype::srv::GameServer::_sendGSRegistration()
     utils::cout("Sent GS registration to gateway");
 }
 
-void rtype::srv::GameServer::_handleGatewayOKKO(const uint8_t *data, std::size_t &offset, std::size_t bufsize)
+void rtype::srv::GameServer::_handleGatewayOKKO(uint8_t cmd, [[maybe_unused]] const uint8_t *data,
+    std::size_t &offset, [[maybe_unused]] std::size_t bufsize)
 {
-    if (offset + 1 > bufsize) {
-        throw std::runtime_error("Incomplete OKKO packet from gateway");
-    }
-    if (const uint8_t response = data[offset]; response == 1) {
+    offset += 1;
+    if (cmd == 21) {
         utils::cout("Successfully registered with TCP gateway");
     } else {
         utils::cerr("Failed to register with TCP gateway");
     }
-    offset += 1;
 }
 
 void rtype::srv::GameServer::_handleOccupancyRequest([[maybe_unused]] const uint8_t *data, std::size_t &offset, std::size_t bufsize)
@@ -179,14 +178,21 @@ void rtype::srv::GameServer::_handleOccupancyRequest([[maybe_unused]] const uint
     if (offset + 1 > bufsize) {
         throw std::runtime_error("Incomplete occupancy request from gateway");
     }
+    offset += 1;
+
     constexpr uint8_t occupancy = 0;
-    std::vector<uint8_t> response;
-    response.push_back(21);
-    response.insert(response.end(), _external_endpoint.ip.begin(), _external_endpoint.ip.end());
-    const uint16_t port_be = htons(_external_endpoint.port);
-    const auto port_bytes = reinterpret_cast<const uint8_t *>(&port_be);
-    response.insert(response.end(), port_bytes, port_bytes + 2);
-    response.push_back(occupancy);
+    std::vector<uint8_t> response = GameServerPacketParser::buildOccupancy(occupancy);
+    // Log outgoing occupancy packet
+    {
+        std::ostringstream ss;
+        ss << std::hex << std::setfill('0');
+        for (size_t i = 0; i < response.size(); ++i) {
+            ss << std::setw(2) << static_cast<int>(response[i]);
+            if (i + 1 < response.size())
+                ss << ' ';
+        }
+        utils::cout("Outgoing OCCUPANCY (hex): ", ss.str());
+    }
     _tcp_send_spans[_tcp_handle].push_back(std::move(response));
     for (auto &fd : _fds) {
         if (fd.handle == _tcp_handle) {
@@ -194,6 +200,5 @@ void rtype::srv::GameServer::_handleOccupancyRequest([[maybe_unused]] const uint
             break;
         }
     }
-    offset += 1;
     utils::cout("Sent occupancy response to gateway: ", static_cast<int>(occupancy));
 }

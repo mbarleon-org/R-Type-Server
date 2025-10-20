@@ -69,6 +69,7 @@ function _all() {
 }
 
 function _debug() {
+    _fclean
     _configure_and_build "Debug" -DENABLE_DEBUG=ON
 }
 

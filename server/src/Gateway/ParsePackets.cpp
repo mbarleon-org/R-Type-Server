@@ -1,4 +1,5 @@
 #include <RTypeSrv/Gateway.hpp>
+#include <RTypeSrv/Utils/Logger.hpp>
 #include <RTypeSrv/GatewayPacketParser.hpp>
 #include <array>
 #include <cstring>
@@ -56,12 +57,21 @@ rtype::network::Handle rtype::srv::Gateway::getGSHandle(const IP &gs_key) const
 }
 
 /**
- * @brief Sends an error response to a client.
- * @param handle The handle of the client to send the error to.
+ * @brief Sends an error response to a client or game server.
+ *
+ * Sends a properly formatted error response according to the protocol.
+ * Common error commands:
+ * - 2: JOIN_KO (join request failed)
+ * - 4: CREATE_KO (create request failed)
+ * - 22: GS_KO (game server registration failed)
+ *
+ * @param handle The handle of the client/server to send the error to.
+ * @param error_cmd The error command code to send (e.g., JOIN_KO=2, CREATE_KO=4, GS_KO=22).
  */
-void rtype::srv::Gateway::sendErrorResponse(const network::Handle handle)
+void rtype::srv::Gateway::sendErrorResponse(const network::Handle handle, uint8_t error_cmd)
 {
-    _send_spans[handle].push_back({0});
+    std::vector<uint8_t> error_msg = PacketParser::buildSimpleResponse(error_cmd);
+    _send_spans[handle].push_back(std::move(error_msg));
     setPolloutForHandle(handle);
 }
 
@@ -91,31 +101,41 @@ void rtype::srv::Gateway::_parsePackets()
             try {
                 const uint8_t pkt = PacketParser::getHeader(buf.data(), offset, buf.size());
                 switch (pkt) {
-                    case 0:
-                        handleKO(handle, buf.data(), offset, buf.size());
-                        break;
                     case 1:
-                        handleOK(handle, buf.data(), offset, buf.size());
+                        handleJoin(handle, buf.data(), offset, buf.size());
                         break;
                     case 2:
-                        handleJoin(handle, buf.data(), offset, buf.size());
+                        handleKO(handle, buf.data(), offset, buf.size());
                         break;
                     case 3:
                         handleCreate(handle, buf.data(), offset, buf.size());
+                        break;
+                    case 4:
+                        handleKO(handle, buf.data(), offset, buf.size());
+                        break;
+                    case 5:
+                        handleGameEnd(handle, buf.data(), offset, buf.size());
                         break;
                     case 20:
                         handleGSRegistration(handle, buf.data(), offset, buf.size());
                         break;
                     case 21:
-                        handleOccupancy(handle, buf.data(), offset, buf.size());
+                        handleOK(handle, buf.data(), offset, buf.size());
                         break;
                     case 22:
+                        handleKO(handle, buf.data(), offset, buf.size());
+                        break;
+                    case 23:
+                        handleOccupancy(handle, buf.data(), offset, buf.size());
+                        break;
+                    case 24:
                         handleGID(handle, buf.data(), offset, buf.size());
                         break;
                     default:
                         throw std::runtime_error("Invalid packet sent by client.");
                 }
-            } catch (const std::exception &) {
+            } catch (const std::exception &e) {
+                utils::cerr("Error parsing packet from handle ", handle, ": ", e.what());
                 _parseErrors[handle]++;
                 if (_parseErrors[handle] >= MAX_PARSE_ERRORS) {
                     throw std::runtime_error("Client sent too many malformed packets.");

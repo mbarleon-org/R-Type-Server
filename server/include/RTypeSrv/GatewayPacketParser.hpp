@@ -104,28 +104,68 @@ class Gateway::PacketParser final
         static std::vector<uint32_t> parseGIDs(const uint8_t *data, std::size_t start, std::size_t bufsize);
 
         /**
-         * @brief Builds a CREATE packet message.
+         * @brief Builds a complete gateway protocol packet header.
+         *
+         * Creates the standard header: [MAGIC:2][VERSION:1][FLAGS:1][CMD:1]
+         * Total size: 5 bytes
+         *
+         * @param cmd The command identifier.
+         * @param flags Optional flags byte (default: 0).
+         * @return Vector containing the 5-byte header.
+         */
+        static std::vector<uint8_t> buildHeader(uint8_t cmd, uint8_t flags = 0);
+
+        /**
+         * @brief Builds a CREATE packet message for game server.
+         *
+         * Format: [HEADER:5][GAMETYPE:1]
+         * Total size: 6 bytes
+         *
          * @param gametype The type of game to create.
-         * @return Vector containing the CREATE message bytes.
+         * @return Vector containing the complete CREATE packet.
          */
         static std::vector<uint8_t> buildCreateMsg(uint8_t gametype);
 
         /**
          * @brief Builds a JOIN message for a client.
-         * @param data Source data buffer.
-         * @param offset Offset in the source buffer.
-         * @return Vector containing the JOIN message for the client.
+         *
+         * Format: [HEADER:5][GAME_ID:4][IP:16][PORT:2]
+         * Total size: 27 bytes
+         *
+         * @param data Source data buffer containing game ID, IP, and port.
+         * @param offset Offset in the source buffer (points to start of game ID).
+         * @return Vector containing the complete JOIN packet for client.
          */
         static std::vector<uint8_t> buildJoinMsgForClient(const uint8_t *data, std::size_t offset);
 
         /**
-         * @brief Builds a JOIN message for a game server.
-         * @param ip IP address of the game server.
-         * @param port Port number of the game server.
-         * @param id Game ID.
-         * @return Vector containing the JOIN message for the game server.
+         * @brief Builds a JOIN message for a game server (GW->GS).
+         *
+         * This is different from client JOIN - it's sent by gateway to game server
+         * to inform it about a new player.
+         *
+         * Format: [HEADER:5][IP:16][PORT:2][GAME_ID:4]
+         * Total size: 27 bytes
+         *
+         * @param ip Client's IPv6 address.
+         * @param port Client's port number.
+         * @param id Game ID the client is joining.
+         * @return Vector containing the complete packet.
          */
         static std::vector<uint8_t> buildJoinMsgForGS(const std::array<uint8_t, 16> &ip, uint16_t port, uint32_t id);
+
+        /**
+         * @brief Builds a simple response packet with just command byte.
+         *
+         * Format: [HEADER:5]
+         * Total size: 5 bytes
+         *
+         * Used for: GS_OK, GS_KO, CREATE_KO, JOIN_KO
+         *
+         * @param cmd The command/response identifier.
+         * @return Vector containing the complete response packet.
+         */
+        static std::vector<uint8_t> buildSimpleResponse(uint8_t cmd);
 };
 
 }// namespace rtype::srv

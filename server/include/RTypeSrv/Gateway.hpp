@@ -161,11 +161,12 @@ class RTYPE_SRV_API Gateway final : public utils::Singleton<Gateway>
         void handleJoin(network::Handle handle, const uint8_t *data, size_t &offset, size_t bufsize);
         void handleCreate(network::Handle handle, const uint8_t *data, size_t &offset, size_t bufsize);
         void handleOccupancy(network::Handle handle, const uint8_t *data, size_t &offset, size_t bufsize);
+        void handleGameEnd(network::Handle handle, const uint8_t *data, size_t &offset, size_t bufsize);
         static void handleKO(network::Handle handle, const uint8_t *data, size_t &offset, size_t bufsize);
         static void handleOK(network::Handle handle, const uint8_t *data, size_t &offset, size_t bufsize);
         void handleGSRegistration(network::Handle handle, const uint8_t *data, size_t &offset, size_t bufsize);
 
-        void sendErrorResponse(network::Handle handle);
+        void sendErrorResponse(network::Handle handle, uint8_t error_cmd);
         std::optional<GsRegistryType::iterator> findLeastOccupiedGS();
         [[nodiscard]] network::Handle getGSHandle(const IP &gs_key) const;
         [[nodiscard]] std::optional<IP> findGSKeyByHandle(network::Handle handle) const noexcept;

@@ -76,8 +76,8 @@ class RTYPE_SRV_API GameServer : public utils::NonCopyable
         void handleCreate(network::Handle handle, const uint8_t *data, std::size_t &offset, std::size_t bufsize);
         void handleOccupancy(network::Handle handle, const uint8_t *data, std::size_t &offset, std::size_t bufsize);
 
-        static void _handleGatewayOKKO(const uint8_t *data, std::size_t &offset, std::size_t bufsize);
         void _handleOccupancyRequest(const uint8_t *data, std::size_t &offset, std::size_t bufsize);
+        static void _handleGatewayOKKO(const uint8_t cmd, const uint8_t *data, std::size_t &offset, std::size_t bufsize);
 
         FdsType _fds{};
         network::NFDS _nfds = 1;

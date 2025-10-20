@@ -29,6 +29,19 @@ class Logger : public Singleton<Logger>
         }
 
         /**
+         * @brief Prints a message to standard output.
+         * @param args The arguments to print.
+         */
+        template<typename... Args>
+        void clog([[maybe_unused]] Args &&...args)
+        {
+#if defined(DEBUG)
+            std::lock_guard<std::mutex> lock(_mtx);
+            (std::clog << ... << args) << std::endl;
+#endif
+        }
+
+        /**
          * @brief Prints a message to standard error.
          * @param args The arguments to print.
          */
@@ -55,6 +68,16 @@ template<typename... Args>
 static inline void cout(Args &&...args)
 {
     Logger::getInstance().cout(std::forward<Args>(args)...);
+}
+
+/**
+ * @brief Prints a message to standard error.
+ * @param args The arguments to print.
+ */
+template<typename... Args>
+static inline void clog(Args &&...args)
+{
+    Logger::getInstance().clog(std::forward<Args>(args)...);
 }
 
 /**
