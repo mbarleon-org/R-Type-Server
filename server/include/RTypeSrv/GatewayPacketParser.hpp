@@ -144,8 +144,8 @@ class Gateway::PacketParser final
          * This is different from client JOIN - it's sent by gateway to game server
          * to inform it about a new player.
          *
-         * Format: [HEADER:5][IP:16][PORT:2][GAME_ID:4]
-         * Total size: 27 bytes
+         * Format: [HEADER:5][CMD:1][GAME_ID:4][IP:16][PORT:2]
+         * Total size: 28 bytes
          *
          * @param ip Client's IPv6 address.
          * @param port Client's port number.

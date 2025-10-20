@@ -144,23 +144,33 @@ std::vector<uint8_t> Gateway::PacketParser::buildJoinMsgForClient(const uint8_t 
 /**
  * @brief Builds a JOIN message for a game server.
  *
- * This message is sent from Gateway to Game Server to notify about a new player.
- * Note: The format here may differ from spec - need clarification on what GW sends to GS for CREATE response.
+ * This message is sent from Gateway to Game Server to notify about a new player joining.
+ * The message includes the CMD (1 for JOIN), then client IP, port and game ID.
  *
- * Format: [HEADER:5][IP:16][PORT:2][GAME_ID:4]
- * Total size: 27 bytes
+ * Format: [HEADER:5][CMD:1][GAME_ID:4][IP:16][PORT:2]
+ * Total size: 28 bytes
  */
 std::vector<uint8_t> Gateway::PacketParser::buildJoinMsgForGS(const std::array<uint8_t, 16> &ip, const uint16_t port, const uint32_t id)
 {
     std::vector<uint8_t> msg = buildHeader(1);// CMD_JOIN = 1
-    msg.reserve(27);
-    msg.insert(msg.end(), ip.begin(), ip.end());
-    msg.push_back(static_cast<uint8_t>(port >> 8));
-    msg.push_back(static_cast<uint8_t>(port & 0xFF));
+    msg.reserve(28);
+
+    // CMD byte (1 for JOIN)
+    msg.push_back(1);
+
+    // Game ID (4 bytes, big-endian)
     msg.push_back(static_cast<uint8_t>((id >> 24) & 0xFF));
     msg.push_back(static_cast<uint8_t>((id >> 16) & 0xFF));
     msg.push_back(static_cast<uint8_t>((id >> 8) & 0xFF));
     msg.push_back(static_cast<uint8_t>(id & 0xFF));
+
+    // Client IP (16 bytes)
+    msg.insert(msg.end(), ip.begin(), ip.end());
+
+    // Client port (2 bytes, big-endian)
+    msg.push_back(static_cast<uint8_t>(port >> 8));
+    msg.push_back(static_cast<uint8_t>(port & 0xFF));
+
     return msg;
 }
 

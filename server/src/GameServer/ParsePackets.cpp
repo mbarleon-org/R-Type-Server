@@ -2,8 +2,8 @@
 #include <RTypeSrv/GameServerPacketParser.hpp>
 #include <RTypeSrv/Utils/Logger.hpp>
 #include <cstring>
-#include <ranges>
 #include <iomanip>
+#include <ranges>
 #include <sstream>
 #include <stdexcept>
 
@@ -32,14 +32,14 @@ std::vector<uint8_t> rtype::srv::GameServer::buildJoinMsgForClient(const uint8_t
 void rtype::srv::GameServer::handleCreate([[maybe_unused]] network::Handle handle, const uint8_t *data, std::size_t &offset,
     std::size_t bufsize)
 {
-    if (offset + 1 > bufsize) {
+    if (offset + 1 + 1 > bufsize) {// CMD + gametype
         utils::cerr("Incomplete CREATE packet from gateway");
         sendErrorResponse(handle);
         return;
     }
 
-    uint8_t gametype = data[offset];
-    offset += 1;
+    uint8_t gametype = data[offset + 1];// Skip CMD byte, read gametype
+    offset += 2;                        // Consume both CMD and gametype
 
     utils::cout("Received CREATE request from gateway, gametype: ", static_cast<int>(gametype));
 
