@@ -123,7 +123,7 @@ std::vector<uint8_t> Gateway::PacketParser::buildHeader(uint8_t cmd, uint8_t fla
  */
 std::vector<uint8_t> Gateway::PacketParser::buildCreateMsg(uint8_t gametype)
 {
-    std::vector<uint8_t> msg = buildHeader(3);// CMD_CREATE = 3
+    std::vector<uint8_t> msg = buildHeader(3);
     msg.push_back(gametype);
     return msg;
 }
@@ -136,7 +136,7 @@ std::vector<uint8_t> Gateway::PacketParser::buildCreateMsg(uint8_t gametype)
  */
 std::vector<uint8_t> Gateway::PacketParser::buildJoinMsgForClient(const uint8_t *data, std::size_t offset)
 {
-    std::vector<uint8_t> msg = buildHeader(1);// CMD_JOIN = 1
+    std::vector<uint8_t> msg = buildHeader(1);
     msg.insert(msg.end(), data + offset, data + offset + 4 + 16 + 2);
     return msg;
 }
@@ -152,25 +152,16 @@ std::vector<uint8_t> Gateway::PacketParser::buildJoinMsgForClient(const uint8_t 
  */
 std::vector<uint8_t> Gateway::PacketParser::buildJoinMsgForGS(const std::array<uint8_t, 16> &ip, const uint16_t port, const uint32_t id)
 {
-    std::vector<uint8_t> msg = buildHeader(1);// CMD_JOIN = 1
+    std::vector<uint8_t> msg = buildHeader(1);
     msg.reserve(28);
-
-    // CMD byte (1 for JOIN)
     msg.push_back(1);
-
-    // Game ID (4 bytes, big-endian)
     msg.push_back(static_cast<uint8_t>((id >> 24) & 0xFF));
     msg.push_back(static_cast<uint8_t>((id >> 16) & 0xFF));
     msg.push_back(static_cast<uint8_t>((id >> 8) & 0xFF));
     msg.push_back(static_cast<uint8_t>(id & 0xFF));
-
-    // Client IP (16 bytes)
     msg.insert(msg.end(), ip.begin(), ip.end());
-
-    // Client port (2 bytes, big-endian)
     msg.push_back(static_cast<uint8_t>(port >> 8));
     msg.push_back(static_cast<uint8_t>(port & 0xFF));
-
     return msg;
 }
 

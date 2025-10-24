@@ -30,7 +30,7 @@ void Gateway::handleJoin(const network::Handle handle, const uint8_t *data, std:
 
     const uint32_t id = PacketParser::extractGameId(data + offset + 1);
     if (_gs_registry.empty()) {
-        std::vector<uint8_t> error_msg = PacketParser::buildSimpleResponse(2);// JOIN_KO
+        std::vector<uint8_t> error_msg = PacketParser::buildSimpleResponse(2);
         _send_spans[handle].push_back(std::move(error_msg));
         setPolloutForHandle(handle);
     } else if (const auto it = _pending_creates.find(handle); it != _pending_creates.end()) {
@@ -49,7 +49,7 @@ void Gateway::handleJoin(const network::Handle handle, const uint8_t *data, std:
         _send_spans[handle].push_back(std::move(join_msg));
         setPolloutForHandle(handle);
     } else {
-        std::vector<uint8_t> error_msg = PacketParser::buildSimpleResponse(2);// JOIN_KO
+        std::vector<uint8_t> error_msg = PacketParser::buildSimpleResponse(2);
         _send_spans[handle].push_back(std::move(error_msg));
         setPolloutForHandle(handle);
     }

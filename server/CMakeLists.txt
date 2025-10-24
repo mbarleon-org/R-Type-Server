@@ -58,6 +58,9 @@ target_compile_definitions(r-type_srv PRIVATE R_TYPE_SRV_BUILD=1)
 #     ${CMAKE_CURRENT_SOURCE_DIR}/../network/include
 # )
 
+find_package(OpenSSL REQUIRED)
+target_link_libraries(r-type_srv PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+
 function(enable_coverage_flags tgt)
     if(APPLE)
         target_compile_options(${tgt} PRIVATE -fprofile-instr-generate -fcoverage-mapping)

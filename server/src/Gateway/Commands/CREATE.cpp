@@ -25,7 +25,7 @@ void Gateway::handleCreate(network::Handle handle, const uint8_t *data, std::siz
     }
     uint8_t gametype = data[offset + 1];
     if (_gs_registry.empty()) {
-        std::vector<uint8_t> error_msg = PacketParser::buildSimpleResponse(4);// CREATE_KO
+        std::vector<uint8_t> error_msg = PacketParser::buildSimpleResponse(4);
         _send_spans[handle].push_back(std::move(error_msg));
         setPolloutForHandle(handle);
         offset += 2;
@@ -33,7 +33,7 @@ void Gateway::handleCreate(network::Handle handle, const uint8_t *data, std::siz
     }
     auto min_gs = findLeastOccupiedGS();
     if (!min_gs) {
-        std::vector<uint8_t> error_msg = PacketParser::buildSimpleResponse(4);// CREATE_KO
+        std::vector<uint8_t> error_msg = PacketParser::buildSimpleResponse(4);
         _send_spans[handle].push_back(std::move(error_msg));
         setPolloutForHandle(handle);
         offset += 2;
@@ -42,7 +42,7 @@ void Gateway::handleCreate(network::Handle handle, const uint8_t *data, std::siz
     auto &[gs_key, _] = **min_gs;
     const network::Handle gs_handle = getGSHandle(gs_key);
     if (gs_handle == 0) {
-        std::vector<uint8_t> error_msg = PacketParser::buildSimpleResponse(4);// CREATE_KO
+        std::vector<uint8_t> error_msg = PacketParser::buildSimpleResponse(4);
         _send_spans[handle].push_back(std::move(error_msg));
         setPolloutForHandle(handle);
         offset += 2;

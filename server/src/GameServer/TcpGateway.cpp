@@ -162,8 +162,8 @@ void rtype::srv::GameServer::_sendGSRegistration()
     utils::cout("Sent GS registration to gateway");
 }
 
-void rtype::srv::GameServer::_handleGatewayOKKO(uint8_t cmd, [[maybe_unused]] const uint8_t *data,
-    std::size_t &offset, [[maybe_unused]] std::size_t bufsize)
+void rtype::srv::GameServer::_handleGatewayOKKO(uint8_t cmd, [[maybe_unused]] const uint8_t *data, std::size_t &offset,
+    [[maybe_unused]] std::size_t bufsize)
 {
     offset += 1;
     if (cmd == 21) {
@@ -182,7 +182,6 @@ void rtype::srv::GameServer::_handleOccupancyRequest([[maybe_unused]] const uint
 
     constexpr uint8_t occupancy = 0;
     std::vector<uint8_t> response = GameServerPacketParser::buildOccupancy(occupancy);
-    // Log outgoing occupancy packet
     {
         std::ostringstream ss;
         ss << std::hex << std::setfill('0');
