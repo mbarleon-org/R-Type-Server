@@ -53,7 +53,7 @@ class RTYPE_SRV_API GameServer : public utils::NonCopyable
         struct ClientState {
                 AuthState authState = AuthState::NONE;
                 std::array<uint8_t, 32> challenge;
-                std::array<uint8_t, 8> sessionKey;
+                std::array<uint8_t, 32> sessionKey;
         };
 
         struct AuthChallenge {
@@ -109,7 +109,6 @@ class RTYPE_SRV_API GameServer : public utils::NonCopyable
         using SendSpanType = std::unordered_map<network::Handle, std::vector<std::vector<uint8_t>>>;
         using RecvPacketsType = std::unordered_map<network::Handle, std::vector<std::vector<uint8_t>>>;
         using FragBufType = std::unordered_map<std::pair<network::Handle, uint32_t>, FragmentBuffer, PairKeyHash>;
-
 
         void _initServer();
         void _serverLoop();

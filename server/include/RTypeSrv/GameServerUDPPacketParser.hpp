@@ -127,18 +127,18 @@ class GameServerUDPPacketParser final
         /**
          * @brief Build an AUTH_OK packet for successful authentication.
          *
-         * Format: [HEADER:21][ID:4][SESSION_KEY:8]
-         * Total size: 33 bytes
+         * Format: [HEADER:21][ID:4][SESSION_KEY:32]
+         * Total size: 57 bytes
          *
          * @param seq Current sequence number
          * @param ackBase Last received sequence
          * @param ackBits SACK bitfield
          * @param clientId Target client ID
-         * @param sessionKey 8-byte session key
+         * @param sessionKey 32-byte session key
          * @return Vector containing complete AUTH_OK packet
          */
         static std::vector<uint8_t> buildAuthOkPacket(uint32_t seq, uint32_t ackBase, uint8_t ackBits, uint32_t clientId,
-            const std::array<uint8_t, 8> &sessionKey);
+            const std::array<uint8_t, 32> &sessionKey);
 
         static constexpr uint16_t HEADER_MAGIC = GSPCOL_MAGIC;
         static constexpr uint8_t VERSION = 0x01;

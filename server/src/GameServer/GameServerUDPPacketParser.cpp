@@ -6,9 +6,9 @@
 #include <stdexcept>
 
 std::vector<uint8_t> rtype::srv::GameServerUDPPacketParser::buildAuthOkPacket(uint32_t seq, uint32_t ackBase, uint8_t ackBits,
-    uint32_t clientId, const std::array<uint8_t, 8> &sessionKey)
+    uint32_t clientId, const std::array<uint8_t, 32> &sessionKey)
 {
-    const uint16_t total_size = static_cast<uint16_t>(HEADER_SIZE + 4 + 8);
+    const uint16_t total_size = static_cast<uint16_t>(HEADER_SIZE + 4 + 32);
     std::vector<uint8_t> packet =
         buildHeader(GSPcol::CMD::AUTH_OK, GSPcol::FLAGS::RELIABLE, seq, ackBase, ackBits, GSPcol::CHANNEL::RO, total_size, clientId);
     packet.push_back(static_cast<uint8_t>((clientId >> 24) & 0xFF));

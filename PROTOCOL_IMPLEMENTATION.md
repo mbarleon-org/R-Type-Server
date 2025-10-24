@@ -1,32 +1,9 @@
 # R-Type Protocol Implementation
 
 ## Overview
-
-This document describes the implementation of the R-Type network protocol as specified in the protocol documentation. The protocol uses **big-endian (network byte order)** for all multi-byte values.
-
-## Connection Types
-
-- **Gateway ↔ Client**: TCP
-- **Gateway ↔ Game Server**: TCP
-- **Game Server ↔ Client**: UDP
-
-## Gateway Protocol (GWPcol) - TCP
-
-### Magic Numbers
-
 - **Gateway Protocol**: `0x4257` ('BW')
 - **Game Server Protocol**: `0x4254` ('BT')
-
 ### Header Format
-
-All gateway protocol packets include a 5-byte header:
-
-```
-[MAGIC:2][VERSION:1][FLAGS:1][CMD:1]
-```
-
-- **MAGIC**: 0x4257 (big-endian uint16)
-- **VERSION**: 0b1 (uint8)
 - **FLAGS**: Currently unused, reserved for future (uint8)
 - **CMD**: Command identifier (uint8)
 
@@ -169,7 +146,7 @@ Formula: `CHANNEL = (Reliable << 1) | Ordered`
 - **CMD_KICK**: `[MSG:1]...` (max 1179 bytes)
 - **CMD_CHALLENGE**: `[TIMESTAMP:8][COOKIE:32]` (40 bytes) — server → client stateless cookie challenge
 - **CMD_AUTH**: `[NONCE:1][COOKIE:32]` (33 bytes) — client → server authentication response
-- **CMD_AUTH_OK**: `[ID:4][SESSION_KEY:8]` (12 bytes)
+- **CMD_AUTH_OK**: `[ID:4][SESSION_KEY:32]` (36 bytes)
 - **CMD_FRAGMENT**: `[SEQ:4][PAYLOAD:1]...`
 
 ### MTU Considerations
