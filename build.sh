@@ -33,11 +33,32 @@ function _cpus() {
 }
 
 function _ensure_tools() {
+    missing=()
     for t in git cmake ninja; do
         if ! command -v "$t" >/dev/null 2>&1; then
-            _error "command '$t' not found" "please install '$t' (or use 'nix develop') 🤓"
+            missing+=("$t")
         fi
     done
+    if [ ${#missing[@]} -ne 0 ]; then
+        hint="Please install: ${missing[*]}"
+        # provide platform-specific hint for ninja
+        for tool in "${missing[@]}"; do
+            if [ "$tool" = "ninja" ]; then
+                case "$(uname -s)" in
+                    Darwin)
+                        hint="$hint\nmacOS: brew install ninja";
+                        ;;
+                    Linux)
+                        hint="$hint\nsudo apt update && sudo apt install -y ninja-build";
+                        ;;
+                    *)
+                        hint="$hint\nWindows (choco): choco install ninja -y";
+                        ;;
+                esac
+            fi
+        done
+        _error "required tool(s) missing" "$hint"
+    fi
     _success "required tools found (git, cmake, ninja)"
 }
 
@@ -53,6 +74,19 @@ function _configure_and_build() {
     mkdir -p build
     cd build || _error "mkdir failed" "could not cd into build/"
     _info "configuring with CMake (Ninja, ${build_type})..."
+    # If VCPKG_ROOT is set, automatically add vcpkg toolchain file and optional triplet
+    if [ -n "${VCPKG_ROOT:-}" ]; then
+        if [ -f "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" ]; then
+            extra_cmake_flags+=("-DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
+            if [ -n "${VCPKG_TARGET_TRIPLET:-}" ]; then
+                extra_cmake_flags+=("-DVCPKG_TARGET_TRIPLET=${VCPKG_TARGET_TRIPLET}")
+            fi
+            _info "Using vcpkg toolchain from ${VCPKG_ROOT} (triplet=${VCPKG_TARGET_TRIPLET:-default})"
+        else
+            _info "VCPKG_ROOT is set but vcpkg toolchain file not found at ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        fi
+    fi
+
     cmake .. -G Ninja -DCMAKE_BUILD_TYPE="${build_type}" "${extra_cmake_flags[@]}" \
         || _error "cmake configuration failed" "check CMake output above"
 
@@ -79,7 +113,20 @@ function _tests_run()
     mkdir -p build
     cd build || _error "mkdir failed" "could not cd into build/"
     _info "configuring tests with CMake (Ninja, Debug)..."
-    cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Debug -DENABLE_TESTS=ON \
+    # If VCPKG_ROOT is set, automatically add vcpkg toolchain
+    if [ -n "${VCPKG_ROOT:-}" ]; then
+        if [ -f "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" ]; then
+            VCPKG_FLAGS=("-DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
+            if [ -n "${VCPKG_TARGET_TRIPLET:-}" ]; then
+                VCPKG_FLAGS+=("-DVCPKG_TARGET_TRIPLET=${VCPKG_TARGET_TRIPLET}")
+            fi
+            _info "Using vcpkg toolchain from ${VCPKG_ROOT} (triplet=${VCPKG_TARGET_TRIPLET:-default})"
+        else
+            _info "VCPKG_ROOT is set but vcpkg toolchain file not found at ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        fi
+    fi
+
+    cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Debug -DENABLE_TESTS=ON "${VCPKG_FLAGS[@]}" \
         || _error "cmake configuration failed" "check CMake output above"
 
     _info "building unit tests (rtype_srv_unit_tests)…"
@@ -120,7 +167,7 @@ function _fclean()
 {
     _clean
     rm -rf r-type_ecs \
-        *.so *.dylib *.dll *.lib *.exp *.a \
+        *.so *.dylib *.dll *.lib *.exp *.a *.ilk *.pdb \
         rtype_srv_unit_tests rtype_srv_unit_tests.exe r-type_server r-type_server.exe \
         unit_tests plugins code_coverage.txt unit_tests-*.profraw unit_tests.profdata vgcore* cmake-build-debug
 }

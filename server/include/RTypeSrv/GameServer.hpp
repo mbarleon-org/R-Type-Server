@@ -71,8 +71,8 @@ class RTYPE_SRV_API GameServer : public utils::NonCopyable
         };
 
         struct LatencyMetrics {
-                std::chrono::microseconds min_rtt{std::chrono::microseconds::max()};
-                std::chrono::microseconds max_rtt{std::chrono::microseconds::min()};
+                std::chrono::microseconds min_rtt{(std::chrono::microseconds::max)()};
+                std::chrono::microseconds max_rtt{(std::chrono::microseconds::min)()};
                 std::chrono::microseconds avg_rtt{0};
                 uint32_t samples{0};
                 std::chrono::steady_clock::time_point last_ping;

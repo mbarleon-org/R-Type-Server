@@ -3,11 +3,11 @@
 #include <RTypeSrv/Utils/IPToStr.hpp>
 #include <RTypeSrv/Utils/Logger.hpp>
 #include <cerrno>
+#include <cstring>
 #include <deque>
 #include <iomanip>
 #include <ranges>
 #include <sstream>
-#include <cstdio>
 #include <utility>
 
 rtype::network::Endpoint rtype::srv::GameServer::GetEndpointFromHandle(const network::Handle &handle)
@@ -87,7 +87,13 @@ void rtype::srv::GameServer::_sendPackets(const network::NFDS i)
                     utils::cerr("Socket buffer full, will retry later");
                     continue;
                 }
-                utils::cerr("Could not send packet: ", ::strerror(err), " (errno=", err, ")");
+#if defined(_WIN32)
+                char error_buf[256];
+                strerror_s(error_buf, sizeof(error_buf), errno);
+                utils::cerr("Could not send packet: ", error_buf, " (errno=", err, ")");
+#else
+                utils::cerr("Could not send packet: ", std::strerror(err), " (errno=", err, ")");
+#endif
                 continue;
             }
         }

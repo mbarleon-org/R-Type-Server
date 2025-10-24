@@ -21,7 +21,117 @@ git clone --recurse-submodules git@github.com:mbarleon/R-Type-Server.git
 Build the project
 
 ```bash
+# On UNIX
 ./build.sh
+```
+
+```powershell
+# On Windows
+.\build.ps1
+```
+
+vcpkg (optional, recommended)
+------------------------------------
+
+This project supports vcpkg manifest mode to install and provide dependencies (OpenSSL) to CMake.
+
+Bootstrap vcpkg (once per machine)
+
+```bash
+cd ~
+git clone https://github.com/microsoft/vcpkg.git vcpkg
+cd vcpkg
+```
+
+```bash
+# On UNIX
+./bootstrap-vcpkg.sh
+```
+
+```powershell
+# On Windows
+.\bootstrap-vcpkg.bat
+```
+
+General manifest-mode usage (project root)
+
+```bash
+# set VCPKG_ROOT to your vcpkg checkout
+export VCPKG_ROOT=~/vcpkg
+# choose a triplet for your platform (examples below)
+export VCPKG_TARGET_TRIPLET=<triplet>
+./build.sh
+```
+
+Platform examples
+
+- macOS (Intel x86_64)
+
+```bash
+export VCPKG_TARGET_TRIPLET=x64-osx
+./build.sh
+```
+
+- macOS (Apple Silicon / arm64)
+
+```bash
+export VCPKG_TARGET_TRIPLET=arm64-osx
+./build.sh
+```
+
+- Linux (x86_64)
+
+```bash
+export VCPKG_TARGET_TRIPLET=x64-linux
+./build.sh
+```
+
+- Windows (PowerShell, MSVC x64)
+
+```powershell
+$env:VCPKG_ROOT = (Resolve-Path '~\vcpkg').Path
+$env:VCPKG_TARGET_TRIPLET = 'x64-windows'
+.\build.ps1
+```
+
+Direct CMake invocation (alternative)
+
+```bash
+cmake -S . -B build \
+  -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
+  -DVCPKG_TARGET_TRIPLET=$VCPKG_TARGET_TRIPLET
+cmake --build build
+```
+
+Notes
+
+- The repository contains a `vcpkg.json` manifest declaring `openssl` as a dependency; when you run CMake with the vcpkg toolchain file, vcpkg manifest mode will install OpenSSL automatically for the selected triplet.
+- If CMake still cannot find OpenSSL, clear the `build/` directory (or `CMakeCache.txt`) and re-run the configure step with the vcpkg toolchain file.
+
+Installing ninja-build
+------------------------------------
+
+This repository expects `ninja` as the build backend. You can install it with your platform package manager.
+
+Platform package manager examples:
+
+- macOS (Homebrew):
+
+```bash
+brew install ninja
+```
+
+- Linux (Debian/Ubuntu):
+
+```bash
+sudo apt update && sudo apt install -y ninja-build
+```
+
+- Windows (Chocolatey):
+
+```powershell
+# as Administrator
+choco install ninja -y
 ```
 
 Run the project

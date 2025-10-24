@@ -1,0 +1,7 @@
+{
+    "name": "r-type-server",
+    "version": "0.0.1",
+    "dependencies": [
+        "openssl"
+    ]
+}

@@ -5,6 +5,24 @@
 #include <cstdlib>
 #include <openssl/crypto.h>
 #include <random>
+#include <string>
+
+static std::string safeGetEnv(const char *name)
+{
+#if defined(_MSC_VER)
+    char *buf = nullptr;
+    size_t sz = 0;
+    if (_dupenv_s(&buf, &sz, name) == 0 && buf != nullptr) {
+        std::string s(buf);
+        free(buf);
+        return s;
+    }
+    return std::string();
+#else
+    const char *v = std::getenv(name);
+    return v ? std::string(v) : std::string();
+#endif
+}
 
 namespace rtype::srv {
 
@@ -31,9 +49,9 @@ void GameServer::handleUDPJoin(network::Handle handle, const uint8_t *data, std:
     _sack_bits[handle] = 0;
     ClientState state;
     state.authState = AuthState::CHALLENGED;
-    const char *env_secret = std::getenv("R_TYPE_SHARED_SECRET");
-    const std::string secret_str = env_secret ? std::string(env_secret) : std::string("r-type-shared-secret");
-    if (!env_secret) {
+    const std::string env_secret = safeGetEnv("R_TYPE_SHARED_SECRET");
+    const std::string secret_str = env_secret == std::string() ? env_secret : std::string("r-type-shared-secret");
+    if (env_secret == std::string()) {
         utils::cout("R_TYPE_SHARED_SECRET not set, falling back to built-in secret (not recommended for production)");
     }
     std::vector<uint8_t> secret(secret_str.begin(), secret_str.end());
@@ -117,8 +135,8 @@ void GameServer::handleUDPPong([[maybe_unused]] network::Handle handle, [[maybe_
     auto &metrics = _latency_metrics[handle];
     if (metrics.last_ping.time_since_epoch().count() != 0) {
         auto rtt = std::chrono::duration_cast<std::chrono::microseconds>(now - metrics.last_ping);
-        metrics.min_rtt = std::min(metrics.min_rtt, rtt);
-        metrics.max_rtt = std::max(metrics.max_rtt, rtt);
+        metrics.min_rtt = (std::min) (metrics.min_rtt, rtt);
+        metrics.max_rtt = (std::max) (metrics.max_rtt, rtt);
         metrics.avg_rtt = (metrics.avg_rtt * metrics.samples + rtt) / (metrics.samples + 1);
         metrics.samples++;
         utils::cout("PONG from client ", clientId, " RTT(us)=", rtt.count(), " avg(us)=", metrics.avg_rtt.count());
@@ -157,9 +175,9 @@ void GameServer::handleUDPAuthResponse(network::Handle handle, const uint8_t *da
     std::array<uint8_t, 32> received_cookie{};
     std::copy_n(data + offset, 32, received_cookie.begin());
     offset += 32;
-    const char *env_secret = std::getenv("R_TYPE_SHARED_SECRET");
-    const std::string secret_str = env_secret ? std::string(env_secret) : std::string("r-type-shared-secret");
-    if (!env_secret) {
+    const std::string env_secret = safeGetEnv("R_TYPE_SHARED_SECRET");
+    const std::string secret_str = env_secret == std::string() ? env_secret : std::string("r-type-shared-secret");
+    if (env_secret == std::string()) {
         utils::cout("R_TYPE_SHARED_SECRET not set, falling back to built-in secret (not recommended for production)");
     }
     std::vector<uint8_t> secret(secret_str.begin(), secret_str.end());

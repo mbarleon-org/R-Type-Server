@@ -23,7 +23,11 @@ function Info([string]$msg) { Write-Host "[INFO]  $msg" -ForegroundColor Yellow 
 
 function Assert-Tool([string]$tool) {
     if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
-        Fail "command '$tool' not found" "please install '$tool'"
+        $hint = "please install '$tool'"
+        if ($tool -eq 'ninja') {
+            $hint = "ninja not found. On Windows you can: choco install ninja -y ; or winget install --id=GnuWin32.Ninja -e"
+        }
+        Fail "command '$tool' not found" $hint
     }
 }
 function Ensure-Tools() {
@@ -47,6 +51,17 @@ function Invoke-ConfigureAndBuild([string]$BuildType, [string[]]$ExtraFlags) {
     try {
         Info "configuring with CMake (Ninja, $BuildType)"
         $cmakeArgs = @("..","-G","Ninja","-DCMAKE_BUILD_TYPE=$BuildType") + $ExtraFlags
+        # If VCPKG_ROOT is set, add vcpkg toolchain and optional triplet
+        if ($env:VCPKG_ROOT) {
+            $toolchain = Join-Path $env:VCPKG_ROOT "scripts\buildsystems\vcpkg.cmake"
+            if (Test-Path $toolchain) {
+                $cmakeArgs += "-DCMAKE_TOOLCHAIN_FILE=$toolchain"
+                if ($env:VCPKG_TARGET_TRIPLET) { $cmakeArgs += "-DVCPKG_TARGET_TRIPLET=$env:VCPKG_TARGET_TRIPLET" }
+                Info "Using vcpkg toolchain from $env:VCPKG_ROOT (triplet=${env:VCPKG_TARGET_TRIPLET})"
+            } else {
+                Info "VCPKG_ROOT is set but vcpkg toolchain file not found at $toolchain"
+            }
+        }
         & cmake @cmakeArgs | Out-Host
 
         Info "building target r-type_server with Ninja"
@@ -61,7 +76,10 @@ function Invoke-ConfigureAndBuild([string]$BuildType, [string[]]$ExtraFlags) {
 }
 
 function Invoke-BuildRelease() { Invoke-ConfigureAndBuild -BuildType "Release" -ExtraFlags @() }
-function Invoke-BuildDebug()   { Invoke-ConfigureAndBuild -BuildType "Debug"   -ExtraFlags @("-DENABLE_DEBUG=ON") }
+function Invoke-BuildDebug()   {
+    Invoke-Fclean
+    Invoke-ConfigureAndBuild -BuildType "Debug" -ExtraFlags @("-DENABLE_DEBUG=ON")
+}
 
 function Invoke-RunTests() {
     Ensure-Tools

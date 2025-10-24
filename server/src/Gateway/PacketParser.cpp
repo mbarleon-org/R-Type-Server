@@ -19,7 +19,7 @@ std::uint8_t Gateway::PacketParser::getHeader(const uint8_t *data, std::size_t &
     auto make_hex = [&](std::size_t pos, std::size_t maxlen) {
         std::ostringstream ss;
         ss << std::hex << std::setfill('0');
-        const std::size_t end = std::min(bufsize, pos + maxlen);
+        const std::size_t end = (std::min)(bufsize, pos + maxlen);
         for (std::size_t i = pos; i < end; ++i) {
             ss << std::setw(2) << static_cast<int>(data[i]);
             if (i + 1 < end)

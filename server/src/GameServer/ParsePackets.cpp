@@ -2,12 +2,17 @@
 #include <RTypeSrv/GameServerPacketParser.hpp>
 #include <RTypeSrv/GameServerUDPPacketParser.hpp>
 #include <RTypeSrv/Utils/Logger.hpp>
-#include <arpa/inet.h>
 #include <cstring>
 #include <iomanip>
 #include <ranges>
 #include <sstream>
 #include <stdexcept>
+
+#if defined(_WIN32)
+    #include <winsock2.h>
+#else
+    #include <arpa/inet.h>
+#endif
 
 void rtype::srv::GameServer::setPolloutForHandle(const network::Handle h) noexcept
 {
