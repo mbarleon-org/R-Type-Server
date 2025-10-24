@@ -1,12 +1,14 @@
 #pragma once
 
 #include <array>
+#include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/kdf.h>
 #include <openssl/rand.h>
 #include <openssl/ssl.h>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace rtype::srv::utils {
@@ -40,11 +42,50 @@ class Crypto
             std::array<uint8_t, 32> okm{};
             size_t s = okm.size();
             EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_HKDF, nullptr);
-            if (!pctx || !EVP_PKEY_derive_init(pctx) || !EVP_PKEY_CTX_set_hkdf_md(pctx, EVP_sha256())
-                || !EVP_PKEY_CTX_set1_hkdf_salt(pctx, salt.data(), static_cast<int>(salt.size()))
-                || !EVP_PKEY_CTX_set1_hkdf_key(pctx, ikm.data(), static_cast<int>(ikm.size())) || !EVP_PKEY_derive(pctx, okm.data(), &s)) {
+            if (!pctx) {
+                unsigned long err = ERR_get_error();
+                throw std::runtime_error(
+                    std::string("HKDF: EVP_PKEY_CTX_new_id failed: ") + (err ? ERR_reason_error_string(err) : "unknown"));
+            }
+            int rc = EVP_PKEY_derive_init(pctx);
+            if (rc <= 0) {
+                unsigned long err = ERR_get_error();
                 EVP_PKEY_CTX_free(pctx);
-                throw std::runtime_error("HKDF derivation failed");
+                throw std::runtime_error(
+                    std::string("HKDF: EVP_PKEY_derive_init failed: ") + (err ? ERR_reason_error_string(err) : "unknown"));
+            }
+            rc = EVP_PKEY_CTX_set_hkdf_md(pctx, EVP_sha256());
+            if (rc <= 0) {
+                unsigned long err = ERR_get_error();
+                EVP_PKEY_CTX_free(pctx);
+                throw std::runtime_error(
+                    std::string("HKDF: EVP_PKEY_CTX_set_hkdf_md failed: ") + (err ? ERR_reason_error_string(err) : "unknown"));
+            }
+            if (!salt.empty()) {
+                rc = EVP_PKEY_CTX_set1_hkdf_salt(pctx, salt.data(), static_cast<int>(salt.size()));
+                if (rc <= 0) {
+                    unsigned long err = ERR_get_error();
+                    EVP_PKEY_CTX_free(pctx);
+                    throw std::runtime_error(
+                        std::string("HKDF: EVP_PKEY_CTX_set1_hkdf_salt failed: ") + (err ? ERR_reason_error_string(err) : "unknown"));
+                }
+            }
+            if (ikm.empty()) {
+                EVP_PKEY_CTX_free(pctx);
+                throw std::runtime_error("HKDF: input key material (ikm) is empty");
+            }
+            rc = EVP_PKEY_CTX_set1_hkdf_key(pctx, ikm.data(), static_cast<int>(ikm.size()));
+            if (rc <= 0) {
+                unsigned long err = ERR_get_error();
+                EVP_PKEY_CTX_free(pctx);
+                throw std::runtime_error(
+                    std::string("HKDF: EVP_PKEY_CTX_set1_hkdf_key failed: ") + (err ? ERR_reason_error_string(err) : "unknown"));
+            }
+            rc = EVP_PKEY_derive(pctx, okm.data(), &s);
+            if (rc <= 0) {
+                unsigned long err = ERR_get_error();
+                EVP_PKEY_CTX_free(pctx);
+                throw std::runtime_error(std::string("HKDF: EVP_PKEY_derive failed: ") + (err ? ERR_reason_error_string(err) : "unknown"));
             }
             EVP_PKEY_CTX_free(pctx);
             return okm;

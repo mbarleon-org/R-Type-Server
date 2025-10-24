@@ -50,8 +50,9 @@ void GameServer::handleUDPJoin(network::Handle handle, const uint8_t *data, std:
     ClientState state;
     state.authState = AuthState::CHALLENGED;
     const std::string env_secret = safeGetEnv("R_TYPE_SHARED_SECRET");
-    const std::string secret_str = env_secret == std::string() ? env_secret : std::string("r-type-shared-secret");
-    if (env_secret == std::string()) {
+    const bool usedEnvSecret = !env_secret.empty();
+    const std::string secret_str = env_secret.empty() ? std::string("r-type-shared-secret") : env_secret;
+    if (!usedEnvSecret) {
         utils::cout("R_TYPE_SHARED_SECRET not set, falling back to built-in secret (not recommended for production)");
     }
     std::vector<uint8_t> secret(secret_str.begin(), secret_str.end());
@@ -176,8 +177,9 @@ void GameServer::handleUDPAuthResponse(network::Handle handle, const uint8_t *da
     std::copy_n(data + offset, 32, received_cookie.begin());
     offset += 32;
     const std::string env_secret = safeGetEnv("R_TYPE_SHARED_SECRET");
-    const std::string secret_str = env_secret == std::string() ? env_secret : std::string("r-type-shared-secret");
-    if (env_secret == std::string()) {
+    const bool usedEnvSecret = !env_secret.empty();
+    const std::string secret_str = env_secret.empty() ? std::string("r-type-shared-secret") : env_secret;
+    if (!usedEnvSecret) {
         utils::cout("R_TYPE_SHARED_SECRET not set, falling back to built-in secret (not recommended for production)");
     }
     std::vector<uint8_t> secret(secret_str.begin(), secret_str.end());
@@ -219,6 +221,7 @@ void GameServer::handleUDPAuthResponse(network::Handle handle, const uint8_t *da
     std::vector<uint8_t> salt(8);
     for (size_t i = 0; i < 8; ++i)
         salt[i] = static_cast<uint8_t>((found_ts >> (56 - i * 8)) & 0xFF);
+    utils::clog("deriveKey: ikm size=", secret.size(), " source=", (usedEnvSecret ? "env" : "fallback"));
     auto derived = utils::Crypto::deriveKey(std::vector<uint8_t>(secret.begin(), secret.end()), salt);
     std::copy(derived.begin(), derived.begin() + 32, it->second.sessionKey.begin());
     it->second.authState = AuthState::AUTHENTICATED;
