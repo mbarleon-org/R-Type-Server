@@ -167,8 +167,8 @@ Formula: `CHANNEL = (Reliable << 1) | Ordered`
 - **CMD_ACK**: `[SEQ:4]...` (list of sequence numbers)
 - **CMD_JOIN**: `[ID:4][NONCE:1][VERSION:1]`
 - **CMD_KICK**: `[MSG:1]...` (max 1179 bytes)
-- **CMD_CHALLENGE**: `[COOKIE:1]...` (max 1179 bytes)
-- **CMD_AUTH**: `[DECODED_CHALLENGE:1]...` (max 1179 bytes)
+- **CMD_CHALLENGE**: `[TIMESTAMP:8][COOKIE:32]` (40 bytes) — server → client stateless cookie challenge
+- **CMD_AUTH**: `[NONCE:1][COOKIE:32]` (33 bytes) — client → server authentication response
 - **CMD_AUTH_OK**: `[ID:4][SESSION_KEY:8]` (12 bytes)
 - **CMD_FRAGMENT**: `[SEQ:4][PAYLOAD:1]...`
 
@@ -246,8 +246,8 @@ These functions work correctly regardless of host architecture.
 ### Client → Game Server Connection
 
 1. CL → GS: `CMD_JOIN` with ID:NONCE:VERSION
-2. GS → CL: `CMD_CHALLENGE` with COOKIE or `CMD_KICK`
-3. If challenge: CL → GS: `CMD_AUTH` with decoded challenge
+2. GS → CL: `CMD_CHALLENGE` with `[TIMESTAMP:8][COOKIE:32]` (timestamp + HMAC cookie) or `CMD_KICK`
+3. If challenge: CL → GS: `CMD_AUTH` with `[NONCE:1][COOKIE:32]` (nonce + cookie)
 4. GS → CL: `CMD_AUTH_OK` with ID:SESSION_KEY or `CMD_KICK`
 
 ## Error Handling

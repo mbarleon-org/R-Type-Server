@@ -5,8 +5,8 @@
 #include <sstream>
 #include <stdexcept>
 
-std::vector<uint8_t> rtype::srv::GameServerUDPPacketParser::buildAuthOkPacket(uint32_t seq, uint32_t ackBase, uint8_t ackBits, uint32_t clientId,
-    const std::array<uint8_t, 8> &sessionKey)
+std::vector<uint8_t> rtype::srv::GameServerUDPPacketParser::buildAuthOkPacket(uint32_t seq, uint32_t ackBase, uint8_t ackBits,
+    uint32_t clientId, const std::array<uint8_t, 8> &sessionKey)
 {
     const uint16_t total_size = static_cast<uint16_t>(HEADER_SIZE + 4 + 8);
     std::vector<uint8_t> packet =
@@ -133,6 +133,19 @@ std::vector<uint8_t> GameServerUDPPacketParser::buildChallenge(uint32_t seq, uin
     auto packet = buildHeader(GSPcol::CMD::CHALLENGE, GSPcol::FLAGS::RELIABLE, seq, ackBase, ackBits, GSPcol::CHANNEL::RO, HEADER_SIZE + 32,
         clientId);
     packet.insert(packet.end(), challenge.begin(), challenge.end());
+    return packet;
+}
+
+std::vector<uint8_t> GameServerUDPPacketParser::buildChallengeWithCookie(uint32_t seq, uint32_t ackBase, uint8_t ackBits, uint32_t clientId,
+    uint64_t timestamp, const std::array<uint8_t, 32> &cookie)
+{
+    const uint16_t total_size = static_cast<uint16_t>(HEADER_SIZE + 8 + 32);
+    auto packet =
+        buildHeader(GSPcol::CMD::CHALLENGE, GSPcol::FLAGS::RELIABLE, seq, ackBase, ackBits, GSPcol::CHANNEL::RO, total_size, clientId);
+    for (int i = 0; i < 8; ++i) {
+        packet.push_back(static_cast<uint8_t>((timestamp >> (56 - i * 8)) & 0xFF));
+    }
+    packet.insert(packet.end(), cookie.begin(), cookie.end());
     return packet;
 }
 

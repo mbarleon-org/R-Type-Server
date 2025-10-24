@@ -351,8 +351,8 @@ enum class CHANNEL : std::uint8_t {
  * - CMD_ACK: [SEQ:4]... (list of sequence numbers being acknowledged)
  * - CMD_JOIN: [ID:4][NONCE:1][VERSION:1] (client auth request to game server)
  * - CMD_KICK: [MSG:1]... (kick reason text, max 1179 bytes)
- * - CMD_CHALLENGE: [COOKIE:1]... (auth challenge data, max 1179 bytes)
- * - CMD_AUTH: [DECODED_CHALLENGE:1]... (client's challenge response, max 1179 bytes)
+ * - CMD_CHALLENGE: [TIMESTAMP:8][COOKIE:32] (40 bytes) — server → client stateless cookie challenge
+ * - CMD_AUTH: [NONCE:1][COOKIE:32] (33 bytes) — client → server authentication response
  * - CMD_AUTH_OK: [ID:4][SESSION_KEY:8] (successful auth, 12 bytes)
  * - CMD_RESYNC: No payload (request full state)
  * - CMD_FRAGMENT: [SEQ:4][PAYLOAD:1]... (fragment sequence + fragment data)

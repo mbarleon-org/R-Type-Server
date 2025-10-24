@@ -2,6 +2,8 @@
 #include <RTypeSrv/GameServerUDPPacketParser.hpp>
 #include <RTypeSrv/Utils/Crypto.hpp>
 #include <RTypeSrv/Utils/Logger.hpp>
+#include <cstdlib>
+#include <openssl/crypto.h>
 #include <random>
 
 namespace rtype::srv {
@@ -29,16 +31,50 @@ void GameServer::handleUDPJoin(network::Handle handle, const uint8_t *data, std:
     _sack_bits[handle] = 0;
     ClientState state;
     state.authState = AuthState::CHALLENGED;
-    auto challenge = utils::Crypto::generateSecureRandom(32);
-    std::copy(challenge.begin(), challenge.end(), state.challenge.begin());
+    const char *env_secret = std::getenv("R_TYPE_SHARED_SECRET");
+    const std::string secret_str = env_secret ? std::string(env_secret) : std::string("r-type-shared-secret");
+    if (!env_secret) {
+        utils::cout("R_TYPE_SHARED_SECRET not set, falling back to built-in secret (not recommended for production)");
+    }
+    std::vector<uint8_t> secret(secret_str.begin(), secret_str.end());
+    std::array<uint8_t, 16> ip_bytes{};
+    if (auto it_ep = _client_endpoints.find(handle); it_ep != _client_endpoints.end()) {
+        ip_bytes = it_ep->second.ip;
+    } else {
+        try {
+            auto ep = GetEndpointFromHandle(handle);
+            ip_bytes = ep.ip;
+        } catch (...) {
+            ip_bytes.fill(0);
+        }
+    }
+    const uint64_t timestamp = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+    std::vector<uint8_t> mac_data;
+    mac_data.insert(mac_data.end(), ip_bytes.begin(), ip_bytes.end());
+    mac_data.push_back(nonce);
+    for (int i = 0; i < 8; ++i) {
+        mac_data.push_back(static_cast<uint8_t>((timestamp >> (56 - i * 8)) & 0xFF));
+    }
+
+    auto mac_vec = utils::Crypto::hmacSHA256(secret, mac_data);
+    std::array<uint8_t, 32> cookie{};
+    if (mac_vec.size() >= cookie.size()) {
+        std::copy_n(mac_vec.begin(), cookie.size(), cookie.begin());
+    } else {
+        std::fill(cookie.begin(), cookie.end(), 0);
+        std::copy(mac_vec.begin(), mac_vec.end(), cookie.begin());
+    }
+
     _client_states[handle] = state;
     AuthChallenge aentry;
-    aentry.challenge = state.challenge;
+    aentry.challenge.fill(0);
     aentry.timestamp = std::chrono::steady_clock::now();
     aentry.attempts = 0;
     _auth_states[handle] = aentry;
-    auto response = GameServerUDPPacketParser::buildChallenge(_client_sequence_nums[handle]++, _last_received_seq[handle],
-        _sack_bits[handle], clientId, state.challenge);
+
+    auto response = GameServerUDPPacketParser::buildChallengeWithCookie(_client_sequence_nums[handle]++, _last_received_seq[handle],
+        _sack_bits[handle], clientId, timestamp, cookie);
     _send_spans[handle].push_back(std::move(response));
     setPolloutForHandle(handle);
 }
@@ -108,7 +144,7 @@ void GameServer::handleUDPResync(network::Handle handle, [[maybe_unused]] const 
 void GameServer::handleUDPAuthResponse(network::Handle handle, const uint8_t *data, std::size_t &offset, std::size_t bufsize,
     uint32_t clientId)
 {
-    if (offset + 32 > bufsize) {
+    if (offset + 1 + 32 > bufsize) {
         utils::cerr("Incomplete AUTH_RESPONSE packet");
         return;
     }
@@ -117,18 +153,56 @@ void GameServer::handleUDPAuthResponse(network::Handle handle, const uint8_t *da
         utils::cerr("Received AUTH_RESPONSE in invalid state from client ", clientId);
         return;
     }
-    std::vector<uint8_t> response(data + offset, data + offset + 32);
+    uint8_t client_nonce = data[offset++];
+    std::array<uint8_t, 32> received_cookie{};
+    std::copy_n(data + offset, 32, received_cookie.begin());
     offset += 32;
-    std::vector<uint8_t> challenge(it->second.challenge.begin(), it->second.challenge.end());
-    auto expectedHMAC = utils::Crypto::hmacSHA256(challenge, challenge);
-
-    if (response != expectedHMAC) {
-        utils::cerr("Invalid authentication response from client ", clientId);
+    const char *env_secret = std::getenv("R_TYPE_SHARED_SECRET");
+    const std::string secret_str = env_secret ? std::string(env_secret) : std::string("r-type-shared-secret");
+    if (!env_secret) {
+        utils::cout("R_TYPE_SHARED_SECRET not set, falling back to built-in secret (not recommended for production)");
+    }
+    std::vector<uint8_t> secret(secret_str.begin(), secret_str.end());
+    std::array<uint8_t, 16> ip_bytes{};
+    if (auto it_ep = _client_endpoints.find(handle); it_ep != _client_endpoints.end()) {
+        ip_bytes = it_ep->second.ip;
+    } else {
+        try {
+            auto ep = GetEndpointFromHandle(handle);
+            ip_bytes = ep.ip;
+        } catch (...) {
+            ip_bytes.fill(0);
+        }
+    }
+    const auto now_s = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+    bool valid = false;
+    uint64_t found_ts = 0;
+    for (int64_t dt = 0; dt <= static_cast<int64_t>(AUTH_TIMEOUT.count()); ++dt) {
+        uint64_t ts = now_s - static_cast<uint64_t>(dt);
+        std::vector<uint8_t> mac_data;
+        mac_data.insert(mac_data.end(), ip_bytes.begin(), ip_bytes.end());
+        mac_data.push_back(client_nonce);
+        for (int i = 0; i < 8; ++i) {
+            mac_data.push_back(static_cast<uint8_t>((ts >> (56 - i * 8)) & 0xFF));
+        }
+        auto mac = utils::Crypto::hmacSHA256(secret, mac_data);
+        if (mac.size() >= received_cookie.size() && CRYPTO_memcmp(mac.data(), received_cookie.data(), received_cookie.size()) == 0) {
+            valid = true;
+            found_ts = ts;
+            break;
+        }
+    }
+    if (!valid) {
+        utils::cerr("Invalid authentication cookie from client ", clientId);
         _recordAuthAttempt(handle);
         return;
     }
-    auto derivedKey = utils::Crypto::deriveKey(challenge, response);
-    std::copy(derivedKey.begin(), derivedKey.begin() + 8, it->second.sessionKey.begin());
+    std::vector<uint8_t> salt(8);
+    for (size_t i = 0; i < 8; ++i)
+        salt[i] = static_cast<uint8_t>((found_ts >> (56 - i * 8)) & 0xFF);
+    auto derived = utils::Crypto::deriveKey(std::vector<uint8_t>(secret.begin(), secret.end()), salt);
+    std::copy(derived.begin(), derived.begin() + 8, it->second.sessionKey.begin());
     it->second.authState = AuthState::AUTHENTICATED;
     auto auth_ok = GameServerUDPPacketParser::buildAuthOkPacket(_client_sequence_nums[handle]++, _last_received_seq[handle],
         _sack_bits[handle], clientId, it->second.sessionKey);

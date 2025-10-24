@@ -24,14 +24,17 @@ Build the project
 ./build.sh
 ```
 
+Run the project
+
+```bash
+R_TYPE_SHARED_SECRET=$(openssl rand -hex 32) ./r-type_server
+```
+
 When exiting the server (by pressing CTRL+C), the SIGINT will be caught to exit
-gracefully. If you press CTRL+C 3 times, the server will forcefully exit by
-calling abort(3). This will cause memory leaks as nothing will be freed if this
-happens.
+gracefully.
 
 ---
 
 ## WARNING
 
 Dear Epitech students, using the contents of this repository directly in your projects may result in a grade penalty (e.g., -42). Use it with caution, and do not add it to your repository unless you have explicit approval from your local pedagogical staff.
-

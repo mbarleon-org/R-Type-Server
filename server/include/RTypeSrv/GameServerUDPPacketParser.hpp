@@ -98,6 +98,15 @@ class GameServerUDPPacketParser final
             const std::array<uint8_t, 32> &challenge);
 
         /**
+         * @brief Build an authentication challenge containing a timestamp and server-generated cookie.
+         *
+         * Format: [HEADER:21][TIMESTAMP:8][COOKIE:32]
+         * Total payload size: 40 bytes
+         */
+        static std::vector<uint8_t> buildChallengeWithCookie(uint32_t seq, uint32_t ackBase, uint8_t ackBits, uint32_t clientId,
+            uint64_t timestamp, const std::array<uint8_t, 32> &cookie);
+
+        /**
          * @brief Build a fragment of a larger message.
          *
          * Format: [HEADER:21][BASE_SEQ:4][TOTAL_SIZE:4][FRAGMENT_OFFSET:4][FRAGMENT_DATA:N]
@@ -130,7 +139,6 @@ class GameServerUDPPacketParser final
          */
         static std::vector<uint8_t> buildAuthOkPacket(uint32_t seq, uint32_t ackBase, uint8_t ackBits, uint32_t clientId,
             const std::array<uint8_t, 8> &sessionKey);
-
 
         static constexpr uint16_t HEADER_MAGIC = GSPCOL_MAGIC;
         static constexpr uint8_t VERSION = 0x01;
