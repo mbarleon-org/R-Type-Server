@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <ranges>
 #include <sstream>
+#include <cstdio>
 #include <utility>
 
 rtype::network::Endpoint rtype::srv::GameServer::GetEndpointFromHandle(const network::Handle &handle)
@@ -86,7 +87,7 @@ void rtype::srv::GameServer::_sendPackets(const network::NFDS i)
                     utils::cerr("Socket buffer full, will retry later");
                     continue;
                 }
-                utils::cerr("Could not send packet: ", strerror(err), " (errno=", err, ")");
+                utils::cerr("Could not send packet: ", ::strerror(err), " (errno=", err, ")");
                 continue;
             }
         }
