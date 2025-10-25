@@ -1,10 +1,33 @@
 #!/usr/bin/env bash
 
-GREEN="\033[1;32m"
-RED="\033[1;31m"
-ILC="\033[3m"
-ORG="\033[1;33m"
-RST="\033[0m"
+MAG=$'\033[1;35m'
+BOLD=$'\033[1m'
+GREEN=$'\033[1;32m'
+RED=$'\033[1;31m'
+ILC=$'\033[3m'
+ORG=$'\033[1;33m'
+RST=$'\033[0m'
+
+function _prompt()
+{
+    local ans
+    local tty=/dev/tty
+    if [ -e "$tty" ] && [ -r "$tty" ] && [ -w "$tty" ]; then
+        printf "%b" "${MAG}${BOLD}[❓] PROMPT:\t${RST} ${ILC}$1:${RST} " > "$tty"
+        if read -r ans < "$tty"; then
+            printf '%s' "$ans"
+        else
+            printf ''
+        fi
+    else
+        printf "%b" "${MAG}${BOLD}[❓] PROMPT:\t${RST} ${ILC}$1:${RST} "
+        if read -r ans; then
+            printf '%s' "$ans"
+        else
+            printf ''
+        fi
+    fi
+}
 
 function _error()
 {
@@ -41,7 +64,6 @@ function _ensure_tools() {
     done
     if [ ${#missing[@]} -ne 0 ]; then
         hint="Please install: ${missing[*]}"
-        # provide platform-specific hint for ninja
         for tool in "${missing[@]}"; do
             if [ "$tool" = "ninja" ]; then
                 case "$(uname -s)" in
@@ -62,6 +84,135 @@ function _ensure_tools() {
     _success "required tools found (git, cmake, ninja)"
 }
 
+function _clone_vcpkg() {
+    local dest="$1"
+    local default="$HOME"
+
+    if [ -z "${dest}" ]; then
+        dest=$( _prompt "Where to install vcpkg? (default: ~)" )
+        dest="${dest:-$default}"
+    fi
+    if [ "${dest#~}" != "${dest}" ]; then
+        dest="${dest/#\~/$HOME}"
+    fi
+    dest="${dest%/}"
+    if [[ "${dest}" != */vcpkg ]]; then
+        dest="${dest}/vcpkg"
+    fi
+    parent_dir="$(dirname "$dest")"
+    mkdir -p "$parent_dir" || return 1
+    git clone https://github.com/microsoft/vcpkg.git "${dest}" || return 1
+    printf '%s' "${dest}"
+}
+
+function _bootstrap_vcpkg() {
+    local dir="$1"
+    if [ -z "${dir}" ]; then
+        _info "No directory provided to _bootstrap_vcpkg"
+        return 1
+    fi
+    if [ ! -d "${dir}" ]; then
+        _info "vcpkg directory not found: ${dir}"
+        return 1
+    fi
+    pushd "${dir}" > /dev/null || return 1
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*|WindowsNT)
+            ./bootstrap-vcpkg.bat
+            ;;
+        *)
+            ./bootstrap-vcpkg.sh
+            ;;
+    esac
+    popd > /dev/null || true
+}
+
+function _install_and_bootstrap_vcpkg() {
+    local answer
+
+    while true; do
+        answer=$( _prompt "vcpkg not detected, would you like to install it? (y/n)" )
+        case "${answer}" in
+            [Yy]*)
+                _info "Installing vcpkg..."
+                local dir
+                dir=$( _clone_vcpkg ) || { _info "vcpkg clone failed"; break; }
+                _bootstrap_vcpkg "${dir}"
+                break
+                ;;
+            [Nn]*)
+                _info "Skipping vcpkg installation."
+                break
+                ;;
+            *)
+                _info "Please answer y or n."
+                ;;
+        esac
+    done
+}
+
+function _setVcpkgTargets() {
+    _info "Setting VCPKG targets"
+    if [ -z "${VCPKG_ROOT:-}" ]; then
+        VCPKG_ROOT="$HOME/vcpkg"
+        _info "VCPKG_ROOT not set; defaulting to ${VCPKG_ROOT}"
+    else
+        if [ "${VCPKG_ROOT#~}" != "${VCPKG_ROOT}" ]; then
+            VCPKG_ROOT="${VCPKG_ROOT/#\~/$HOME}"
+            _info "Expanded VCPKG_ROOT to ${VCPKG_ROOT}"
+        fi
+    fi
+
+    if [ ! -d "$VCPKG_ROOT" ]; then
+        if [ "${AUTO_VCPKG:-}" = "1" ]; then
+            _info "Auto-installing vcpkg into ${VCPKG_ROOT}"
+            dir=$( _clone_vcpkg "$VCPKG_ROOT" ) || { _info "vcpkg clone failed"; }
+            if [ -n "${dir}" ]; then
+                _bootstrap_vcpkg "${dir}"
+            fi
+        else
+            _install_and_bootstrap_vcpkg
+        fi
+    fi
+
+    if [ -z "${VCPKG_TARGET_TRIPLET:-}" ]; then
+        case "$(uname -s)" in
+            Darwin)
+                case "$(uname -m)" in
+                    arm64) VCPKG_TARGET_TRIPLET="arm64-osx" ;;
+                    *) VCPKG_TARGET_TRIPLET="x64-osx" ;;
+                esac
+                ;;
+            Linux)
+                case "$(uname -m)" in
+                    aarch64|arm64) VCPKG_TARGET_TRIPLET="arm64-linux" ;;
+                    *) VCPKG_TARGET_TRIPLET="x64-linux" ;;
+                esac
+                ;;
+            MINGW*|MSYS*|CYGWIN*|WindowsNT)
+                case "$(uname -m)" in
+                    aarch64|arm64) VCPKG_TARGET_TRIPLET="arm64-windows" ;;
+                    *) VCPKG_TARGET_TRIPLET="x64-windows" ;;
+                esac
+                ;;
+            *)
+                VCPKG_TARGET_TRIPLET="x64-linux" ;;
+        esac
+        _info "Auto-selected VCPKG_TARGET_TRIPLET=${VCPKG_TARGET_TRIPLET} based on platform"
+    fi
+
+    VCPKG_FLAGS=()
+    if [ -f "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" ]; then
+        VCPKG_FLAGS+=("-DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
+        if [ -n "${VCPKG_TARGET_TRIPLET:-}" ]; then
+            VCPKG_FLAGS+=("-DVCPKG_TARGET_TRIPLET=${VCPKG_TARGET_TRIPLET}")
+        fi
+        _info "Using vcpkg toolchain from ${VCPKG_ROOT} (triplet=${VCPKG_TARGET_TRIPLET})"
+    else
+        _info "VCPKG toolchain file not found at ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake; vcpkg integration skipped"
+    fi
+}
+
 function _configure_and_build() {
     local build_type="$1"; shift
     local extra_cmake_flags=("$@")
@@ -70,27 +221,23 @@ function _configure_and_build() {
     _info "updating external submodules..."
     git submodule update --init --recursive
     _success "updated external submodules !"
-
+    _setVcpkgTargets
+    extra_cmake_flags+=("${VCPKG_FLAGS[@]}")
     mkdir -p build
     cd build || _error "mkdir failed" "could not cd into build/"
     _info "configuring with CMake (Ninja, ${build_type})..."
-    # If VCPKG_ROOT is set, automatically add vcpkg toolchain file and optional triplet
-    if [ -n "${VCPKG_ROOT:-}" ]; then
-        if [ -f "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" ]; then
-            extra_cmake_flags+=("-DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
-            if [ -n "${VCPKG_TARGET_TRIPLET:-}" ]; then
-                extra_cmake_flags+=("-DVCPKG_TARGET_TRIPLET=${VCPKG_TARGET_TRIPLET}")
-            fi
-            _info "Using vcpkg toolchain from ${VCPKG_ROOT} (triplet=${VCPKG_TARGET_TRIPLET:-default})"
-        else
-            _info "VCPKG_ROOT is set but vcpkg toolchain file not found at ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-        fi
+    cmake_cmd=(cmake .. -G Ninja -DCMAKE_BUILD_TYPE="${build_type}" "${extra_cmake_flags[@]}")
+    if [ "${DRY_RUN:-}" = "1" ]; then
+        _info "DRY RUN: ${cmake_cmd[*]}"
+        return 0
     fi
-
-    cmake .. -G Ninja -DCMAKE_BUILD_TYPE="${build_type}" "${extra_cmake_flags[@]}" \
-        || _error "cmake configuration failed" "check CMake output above"
+    "${cmake_cmd[@]}" || _error "cmake configuration failed" "check CMake output above"
 
     _info "building target r-type_server with Ninja..."
+    if [ "${DRY_RUN:-}" = "1" ]; then
+        _info "DRY RUN: ninja -j$(_cpus) r-type_server"
+        return 0
+    fi
     if ninja -j"$(_cpus)" r-type_server; then
         _success "compiled r-type_server"
         exit 0
@@ -110,22 +257,10 @@ function _debug() {
 function _tests_run()
 {
     _ensure_tools
+    _setVcpkgTargets
     mkdir -p build
     cd build || _error "mkdir failed" "could not cd into build/"
     _info "configuring tests with CMake (Ninja, Debug)..."
-    # If VCPKG_ROOT is set, automatically add vcpkg toolchain
-    if [ -n "${VCPKG_ROOT:-}" ]; then
-        if [ -f "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" ]; then
-            VCPKG_FLAGS=("-DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
-            if [ -n "${VCPKG_TARGET_TRIPLET:-}" ]; then
-                VCPKG_FLAGS+=("-DVCPKG_TARGET_TRIPLET=${VCPKG_TARGET_TRIPLET}")
-            fi
-            _info "Using vcpkg toolchain from ${VCPKG_ROOT} (triplet=${VCPKG_TARGET_TRIPLET:-default})"
-        else
-            _info "VCPKG_ROOT is set but vcpkg toolchain file not found at ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-        fi
-    fi
-
     cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Debug -DENABLE_TESTS=ON "${VCPKG_FLAGS[@]}" \
         || _error "cmake configuration failed" "check CMake output above"
 
@@ -167,7 +302,7 @@ function _fclean()
 {
     _clean
     rm -rf r-type_ecs \
-        *.so *.dylib *.dll *.lib *.exp *.a *.ilk *.pdb \
+        ./*.so ./*.dylib ./*.dll ./*.lib ./*.exp ./*.a ./*.ilk ./*.pdb \
         rtype_srv_unit_tests rtype_srv_unit_tests.exe r-type_server r-type_server.exe \
         unit_tests plugins code_coverage.txt unit_tests-*.profraw unit_tests.profdata vgcore* cmake-build-debug
 }
@@ -179,6 +314,12 @@ fi
 for args in "$@"
 do
     case $args in
+        --auto-vcpkg)
+            AUTO_VCPKG=1
+            ;;
+        --dry-run)
+            DRY_RUN=1
+            ;;
         -h|--help)
             cat << EOF
 USAGE:

@@ -35,6 +35,13 @@ vcpkg (optional, recommended)
 
 This project supports vcpkg manifest mode to install and provide dependencies (OpenSSL) to CMake.
 
+The build scripts have a few conveniences to make using vcpkg easier:
+
+- If `VCPKG_ROOT` is not set, the scripts default it to `~/vcpkg` (tilde `~` is expanded).
+- If `VCPKG_TARGET_TRIPLET` is not set, the scripts auto-select a sensible triplet based on OS and CPU architecture (for example `x64-linux`, `arm64-osx`, `x64-windows`).
+- `--auto-vcpkg` (or `-AutoVcpkg` in PowerShell) will attempt to clone and bootstrap vcpkg non-interactively into the chosen `VCPKG_ROOT`.
+- `--dry-run` (or `-DryRun`) prints the CMake and Ninja commands that would be executed and exits without running them.
+
 Bootstrap vcpkg (once per machine)
 
 ```bash
@@ -53,17 +60,17 @@ cd vcpkg
 .\bootstrap-vcpkg.bat
 ```
 
-General manifest-mode usage (project root)
+Usage (project root)
 
 ```bash
-# set VCPKG_ROOT to your vcpkg checkout
+# (optional) let scripts default VCPKG_ROOT to ~/vcpkg or set it explicitly
 export VCPKG_ROOT=~/vcpkg
-# choose a triplet for your platform (examples below)
+# optionally override auto-detected triplet
 export VCPKG_TARGET_TRIPLET=<triplet>
-./build.sh
+./build.sh --auto-vcpkg
 ```
 
-Platform examples
+Examples
 
 - macOS (Intel x86_64)
 
@@ -91,7 +98,7 @@ export VCPKG_TARGET_TRIPLET=x64-linux
 ```powershell
 $env:VCPKG_ROOT = (Resolve-Path '~\vcpkg').Path
 $env:VCPKG_TARGET_TRIPLET = 'x64-windows'
-.\build.ps1
+.\build.ps1 --auto-vcpkg
 ```
 
 Direct CMake invocation (alternative)

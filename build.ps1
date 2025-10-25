@@ -3,23 +3,43 @@
 param(
     [Alias('h')][switch] $Help,
     [Alias('d')][switch] $Debug,
-    [Alias('c')][switch] $DoClean,
-    [Alias('f')][switch] $DoFClean,
+    [Alias('c')][switch] $Clean,
+    [Alias('f')][switch] $Fclean,
     [Alias('t')][switch] $Tests,
-    [Alias('r')][switch] $Re
+    [Alias('r')][switch] $Re,
+    [switch]$AutoVcpkg,
+    [switch]$DryRun
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# ---------- helpers ----------
-function Fail([string]$msg, [string]$hint = "") {
-    Write-Host "[ERROR] $msg" -ForegroundColor Red
+$EMOJI_OK = '✅'
+$EMOJI_ERR = '❌'
+$EMOJI_INFO = '🚧'
+$EMOJI_QUESTION = '❓'
+
+function Fail([string]$msg, [string]$hint = "", [bool]$shouldExit = $True) {
+    Write-Host "[$EMOJI_ERR] ERROR:`t$msg" -ForegroundColor Red
     if ($hint) { Write-Host "        $hint" -ForegroundColor DarkRed }
-    exit 84
+    if ($shouldExit) { exit 84 }
 }
-function Ok([string]$msg)   { Write-Host "[OK]    $msg" -ForegroundColor Green }
-function Info([string]$msg) { Write-Host "[INFO]  $msg" -ForegroundColor Yellow }
+
+function Ok([string]$msg) {
+    Write-Host "[$EMOJI_OK] SUCCESS:`t$msg" -ForegroundColor Green
+}
+
+function Info([string]$msg) {
+    Write-Host "[$EMOJI_INFO] RUNNING:`t$msg" -ForegroundColor Yellow
+}
+
+function Prompt-Interactive([string]$message) {
+    try {
+        return (Read-Host -Prompt ("[$EMOJI_QUESTION] PROMPT:`t{0}" -f $message))
+    } catch {
+        return ""
+    }
+}
 
 function Assert-Tool([string]$tool) {
     if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
@@ -29,83 +49,142 @@ function Assert-Tool([string]$tool) {
         }
         Fail "command '$tool' not found" $hint
     }
+
 }
-function Ensure-Tools() {
-    @('git','cmake','ninja') | ForEach-Object { Assert-Tool $_ }
-    Ok "required tools found (git, cmake, ninja)"
-}
-function Get-CpuCount() {
-    if ($env:NUMBER_OF_PROCESSORS) { return [int]$env:NUMBER_OF_PROCESSORS }
+
+function Get-CPUCount {
+    if ($IsWindows) {
+        return (Get-WmiObject -Class Win32_Processor).NumberOfLogicalProcessors
+    }
+    if (Test-Path /proc/cpuinfo) {
+        return (Get-Content /proc/cpuinfo | Select-String "^processor" | Measure-Object).Count
+    }
     return 4
 }
 
-# ---------- core actions ----------
-function Invoke-ConfigureAndBuild([string]$BuildType, [string[]]$ExtraFlags) {
-    Ensure-Tools
-    Info "updating external submodules..."
-    git submodule update --init --recursive
-    Ok "updated external submodules"
+function Ensure-Tools {
+    $missing = @()
+    foreach ($t in @('git', 'cmake', 'ninja')) {
+        if (-not (Get-Command $t -ErrorAction SilentlyContinue)) {
+            $missing += $t
+        }
+    }
+    if ($missing.Count -gt 0) {
+        Fail "Missing required tools: $($missing -join ', ')" "" $False
+        exit 1
+    }
+}
 
-    if (-not (Test-Path ./build)) { New-Item -ItemType Directory -Path ./build | Out-Null }
-    Push-Location ./build
+function Clone-Vcpkg {
+    param(
+        [string]$Destination
+    )
+    if (-not $Destination) { $Destination = "$HOME\vcpkg" }
+    if ($Destination.StartsWith('~')) { $Destination = $Destination -replace '^~',$HOME }
+    if (-not $Destination.EndsWith('vcpkg')) { $Destination = Join-Path $Destination 'vcpkg' }
+    $parent = Split-Path $Destination -Parent
+    New-Item -ItemType Directory -Force -Path $parent | Out-Null
+    git clone https://github.com/microsoft/vcpkg.git $Destination
+    return $Destination
+}
+
+function Bootstrap-Vcpkg {
+    param(
+        [string]$Dir
+    )
+    if (-not (Test-Path $Dir)) {
+        Fail "vcpkg path not found: $Dir" "" $False
+        return $false
+    }
+    Push-Location $Dir
     try {
-        Info "configuring with CMake (Ninja, $BuildType)"
-        $cmakeArgs = @("..","-G","Ninja","-DCMAKE_BUILD_TYPE=$BuildType") + $ExtraFlags
-        # If VCPKG_ROOT is set, add vcpkg toolchain and optional triplet
-        if ($env:VCPKG_ROOT) {
-            $toolchain = Join-Path $env:VCPKG_ROOT "scripts\buildsystems\vcpkg.cmake"
-            if (Test-Path $toolchain) {
-                $cmakeArgs += "-DCMAKE_TOOLCHAIN_FILE=$toolchain"
-                if ($env:VCPKG_TARGET_TRIPLET) { $cmakeArgs += "-DVCPKG_TARGET_TRIPLET=$env:VCPKG_TARGET_TRIPLET" }
-                Info "Using vcpkg toolchain from $env:VCPKG_ROOT (triplet=${env:VCPKG_TARGET_TRIPLET})"
+        if ($IsWindows) {
+            .\bootstrap-vcpkg.bat
+        } else {
+            ./bootstrap-vcpkg.sh
+        }
+    } finally {
+        Pop-Location
+    }
+    return $true
+}
+
+function Get-VcpkgToolchainArgs {
+    $root = $env:VCPKG_ROOT
+    if (-not $root) { $root = "$HOME\vcpkg" }
+    if ($root.StartsWith('~')) { $root = $root -replace '^~',$HOME }
+    if (-not (Test-Path "$root/scripts/buildsystems/vcpkg.cmake")) {
+        if ($AutoVcpkg) {
+            Info "Auto-installing vcpkg into $root"
+            $cloned = Clone-Vcpkg -Destination $root
+            Bootstrap-Vcpkg -Dir $cloned | Out-Null
+        } else {
+            $ans = Prompt-Interactive "vcpkg not detected, would you like to install it? (y/n)"
+            if ($ans -match '^[Yy]') {
+                Info "Installing vcpkg into $root"
+                $cloned = Clone-Vcpkg -Destination $root
+                Bootstrap-Vcpkg -Dir $cloned | Out-Null
             } else {
-                Info "VCPKG_ROOT is set but vcpkg toolchain file not found at $toolchain"
+                Info "vcpkg toolchain not found at $root; continuing without vcpkg"
+                return @()
             }
         }
-        & cmake @cmakeArgs | Out-Host
-
-        Info "building target r-type_server with Ninja"
-        & ninja -j (Get-CpuCount) r-type_server | Out-Host
-
-        Ok "compiled r-type_server"
-    } catch {
-        Fail "compilation error" "failed to compile r-type_server"
-    } finally {
-        Pop-Location
     }
+    if (-not $env:VCPKG_TARGET_TRIPLET) {
+        $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+        if ($IsMacOS) {
+            if ($arch -eq 'Arm64') { $env:VCPKG_TARGET_TRIPLET = 'arm64-osx' } else { $env:VCPKG_TARGET_TRIPLET = 'x64-osx' }
+        } elseif ($IsLinux) {
+            if ($arch -eq 'Arm64') { $env:VCPKG_TARGET_TRIPLET = 'arm64-linux' } else { $env:VCPKG_TARGET_TRIPLET = 'x64-linux' }
+        } else {
+            if ($arch -eq 'Arm64') { $env:VCPKG_TARGET_TRIPLET = 'arm64-windows' } else { $env:VCPKG_TARGET_TRIPLET = 'x64-windows' }
+        }
+        Info "Auto-selected VCPKG_TARGET_TRIPLET=$($env:VCPKG_TARGET_TRIPLET)"
+    }
+    return @("-DCMAKE_TOOLCHAIN_FILE=$root/scripts/buildsystems/vcpkg.cmake", "-DVCPKG_TARGET_TRIPLET=$($env:VCPKG_TARGET_TRIPLET)")
 }
 
-function Invoke-BuildRelease() { Invoke-ConfigureAndBuild -BuildType "Release" -ExtraFlags @() }
-function Invoke-BuildDebug()   {
-    Invoke-Fclean
-    Invoke-ConfigureAndBuild -BuildType "Debug" -ExtraFlags @("-DENABLE_DEBUG=ON")
-}
-
-function Invoke-RunTests() {
+function Configure-And-Build {
+    param(
+        [string]$BuildType = 'Release',
+        [string[]]$ExtraArgs
+    )
     Ensure-Tools
-    if (-not (Test-Path ./build)) { New-Item -ItemType Directory -Path ./build | Out-Null }
-    Push-Location ./build
-    try {
-        Info "configuring tests with CMake (Ninja, Debug)"
-        & cmake ".." -G "Ninja" -DCMAKE_BUILD_TYPE=Debug | Out-Host
+    git submodule update --init --recursive
+    $vcpkgArgs = Get-VcpkgToolchainArgs
+    $cmakeArgs = @('-G','Ninja', "-DCMAKE_BUILD_TYPE=$BuildType") + $vcpkgArgs + $ExtraArgs
+    New-Item -ItemType Directory -Force -Path build | Out-Null
+    Push-Location build
+    if ($DryRun) { Info "DRY RUN: cmake .. $cmakeArgs"; Pop-Location; return }
+    cmake .. $cmakeArgs
+    if ($DryRun) { Info "DRY RUN: ninja -j $(Get-CPUCount) r-type_server"; Pop-Location; return }
+    ninja -j (Get-CPUCount) r-type_server
+    $rc = $LASTEXITCODE
+    Pop-Location
+    exit $rc
+}
 
-        Info "building unit tests (zap_srv_unit_tests)"
-        & ninja -j (Get-CpuCount) zap_srv_unit_tests | Out-Host
-    } catch {
-        Fail "unit tests compilation error" "failed to compile zap_srv_unit_tests"
-    } finally {
-        Pop-Location
-    }
+function Invoke-BuildRelease {
+    Configure-And-Build -BuildType 'Release'
+}
 
-    $testExe = Join-Path "build" "zap_srv_unit_tests.exe"
-    if (-not (Test-Path $testExe)) {
-        $alt = Join-Path "build" "zap_srv_unit_tests"
-        if (Test-Path $alt) { $testExe = $alt }
-    }
+function Invoke-BuildDebug {
+    Configure-And-Build -BuildType 'Debug' -ExtraArgs @('-DENABLE_DEBUG=ON')
+}
 
-    Info "running unit tests"
-    & "$testExe"
-    Ok "unit tests succeed"
+function Invoke-RunTests {
+    Ensure-Tools
+    git submodule update --init --recursive
+    $vcpkgArgs = Get-VcpkgToolchainArgs
+    New-Item -ItemType Directory -Force -Path build | Out-Null
+    Push-Location build
+    if ($DryRun) { Info "DRY RUN: cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Debug -DENABLE_TESTS=ON $vcpkgArgs"; Pop-Location; return }
+    cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Debug -DENABLE_TESTS=ON $vcpkgArgs
+    ninja -j (Get-CPUCount) rtype_srv_unit_tests
+    Pop-Location
+    if ($DryRun) { Info 'Dry run; would run unit tests'; return }
+    & ./rtype_srv_unit_tests
+    Ok "unit tests executed"
 
     $coverageOut = "code_coverage.txt"
     try {
@@ -122,7 +201,19 @@ function Invoke-RunTests() {
 }
 
 function Invoke-Clean() {
-    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue build
+    $scriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Path $MyInvocation.MyCommand.Path -Parent }
+    $buildDir = Join-Path $scriptRoot 'build'
+    if (Test-Path $buildDir) {
+        Info "Removing build directory: ${buildDir}"
+        try {
+            Remove-Item -LiteralPath $buildDir -Recurse -Force -ErrorAction Stop
+            Info "Removed: ${buildDir}"
+        } catch {
+            Fail "Failed to remove ${buildDir}: $($_.Exception.Message)" "" $False
+        }
+    } else {
+        Info "No build directory at: ${buildDir}"
+    }
 }
 
 function Invoke-FClean() {
@@ -154,9 +245,9 @@ ARGUMENTS:
     exit 0
 }
 
-if     ($DoClean)  { Invoke-Clean;  exit 0 }
-elseif ($DoFClean) { Invoke-FClean; exit 0 }
-elseif ($Debug)    { Invoke-BuildDebug; exit 0 }
+if     ($Clean)  { Invoke-Clean;  exit 0 }
+elseif ($Fclean) { Invoke-FClean; exit 0 }
+elseif ($Debug)    { Invoke-FClean; Invoke-BuildDebug; exit 0 }
 elseif ($Tests)    { Invoke-RunTests;   exit 0 }
 elseif ($Re)       { Invoke-FClean; Invoke-BuildRelease; exit 0 }
 else               { Invoke-BuildRelease }
