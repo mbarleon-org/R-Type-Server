@@ -39,6 +39,7 @@ The build scripts have a few conveniences to make using vcpkg easier:
 
 - If `VCPKG_ROOT` is not set, the scripts default it to `~/vcpkg` (tilde `~` is expanded).
 - If `VCPKG_TARGET_TRIPLET` is not set, the scripts auto-select a sensible triplet based on OS and CPU architecture (for example `x64-linux`, `arm64-osx`, `x64-windows`).
+- If vcpkg is not detected, the scripts will ask you if you want to install it.
 - `--auto-vcpkg` (or `-AutoVcpkg` in PowerShell) will attempt to clone and bootstrap vcpkg non-interactively into the chosen `VCPKG_ROOT`.
 - `--dry-run` (or `-DryRun`) prints the CMake and Ninja commands that would be executed and exits without running them.
 

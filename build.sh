@@ -86,10 +86,10 @@ function _ensure_tools() {
 
 function _clone_vcpkg() {
     local dest="$1"
-    local default="$HOME"
+    local default=$(realpath "$VCPKG_ROOT")
 
     if [ -z "${dest}" ]; then
-        dest=$( _prompt "Where to install vcpkg? (default: ~)" )
+        dest=$( _prompt "Where to install vcpkg? (default: $default)" )
         dest="${dest:-$default}"
     fi
     if [ "${dest#~}" != "${dest}" ]; then
@@ -138,6 +138,7 @@ function _install_and_bootstrap_vcpkg() {
                 local dir
                 dir=$( _clone_vcpkg ) || { _info "vcpkg clone failed"; break; }
                 _bootstrap_vcpkg "${dir}"
+                _success "Successfully installed vcpkg"
                 break
                 ;;
             [Nn]*)
@@ -157,8 +158,8 @@ function _setVcpkgTargets() {
         VCPKG_ROOT="$HOME/vcpkg"
         _info "VCPKG_ROOT not set; defaulting to ${VCPKG_ROOT}"
     else
-        if [ "${VCPKG_ROOT#~}" != "${VCPKG_ROOT}" ]; then
-            VCPKG_ROOT="${VCPKG_ROOT/#\~/$HOME}"
+        if [ "$VCPKG_ROOT" != $(realpath "$VCPKG_ROOT") ]; then
+            VCPKG_ROOT=$(realpath "$VCPKG_ROOT")
             _info "Expanded VCPKG_ROOT to ${VCPKG_ROOT}"
         fi
     fi
@@ -169,6 +170,7 @@ function _setVcpkgTargets() {
             dir=$( _clone_vcpkg "$VCPKG_ROOT" ) || { _info "vcpkg clone failed"; }
             if [ -n "${dir}" ]; then
                 _bootstrap_vcpkg "${dir}"
+                _success "Successfully installed vcpkg"
             fi
         else
             _install_and_bootstrap_vcpkg
@@ -207,9 +209,9 @@ function _setVcpkgTargets() {
         if [ -n "${VCPKG_TARGET_TRIPLET:-}" ]; then
             VCPKG_FLAGS+=("-DVCPKG_TARGET_TRIPLET=${VCPKG_TARGET_TRIPLET}")
         fi
-        _info "Using vcpkg toolchain from ${VCPKG_ROOT} (triplet=${VCPKG_TARGET_TRIPLET})"
+        _success "Using vcpkg toolchain from ${VCPKG_ROOT} (triplet=${VCPKG_TARGET_TRIPLET})"
     else
-        _info "VCPKG toolchain file not found at ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake; vcpkg integration skipped"
+        _info "vcpkg toolchain file not found at ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake; vcpkg integration skipped"
     fi
 }
 
@@ -228,14 +230,14 @@ function _configure_and_build() {
     _info "configuring with CMake (Ninja, ${build_type})..."
     cmake_cmd=(cmake .. -G Ninja -DCMAKE_BUILD_TYPE="${build_type}" "${extra_cmake_flags[@]}")
     if [ "${DRY_RUN:-}" = "1" ]; then
-        _info "DRY RUN: ${cmake_cmd[*]}"
+        _success "DRY RUN: ${cmake_cmd[*]}"
         return 0
     fi
     "${cmake_cmd[@]}" || _error "cmake configuration failed" "check CMake output above"
 
     _info "building target r-type_server with Ninja..."
     if [ "${DRY_RUN:-}" = "1" ]; then
-        _info "DRY RUN: ninja -j$(_cpus) r-type_server"
+        _success "DRY RUN: ninja -j$(_cpus) r-type_server"
         return 0
     fi
     if ninja -j"$(_cpus)" r-type_server; then
@@ -316,9 +318,15 @@ do
     case $args in
         --auto-vcpkg)
             AUTO_VCPKG=1
+            if [ $# -eq 1 ]; then
+                _all
+            fi
             ;;
         --dry-run)
             DRY_RUN=1
+            if [ $# -eq 1 ]; then
+                _all
+            fi
             ;;
         -h|--help)
             cat << EOF
