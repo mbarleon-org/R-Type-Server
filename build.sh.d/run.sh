@@ -39,7 +39,7 @@ function _run () {
                 fi
                 ;;
             -h|--help)
-                _print_helper
+                _print_helper $@
                 exit 0
                 ;;
             -c|--clean)
