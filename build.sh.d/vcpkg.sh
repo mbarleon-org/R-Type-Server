@@ -4,16 +4,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/io.sh"
 
 function _clone_vcpkg() {
-    local dest="$1"
-    local default=$(realpath "$VCPKG_ROOT")
+    local dest="${1:-}"
+    local default=$(realpath "${VCPKG_ROOT}")
 
     if [ -z "${dest}" ]; then
-        dest=$( _prompt "Where to install vcpkg? (default: $default)" )
+        dest=$( _prompt "Where to install vcpkg? (default: ${default})" )
         dest="${dest:-$default}"
     fi
-    if [ "${dest#~}" != "${dest}" ]; then
-        dest="${dest/#\~/$HOME}"
-    fi
+    dest=$(realpath "${dest}")
     dest="${dest%/}"
     if [[ "${dest}" != */vcpkg ]]; then
         dest="${dest}/vcpkg"
@@ -77,8 +75,9 @@ function _set_vcpkg_targets() {
         VCPKG_ROOT="$HOME/vcpkg"
         _info "VCPKG_ROOT not set; defaulting to ${VCPKG_ROOT}"
     else
-        if [ "$VCPKG_ROOT" != $(realpath "$VCPKG_ROOT") ]; then
-            VCPKG_ROOT=$(realpath "$VCPKG_ROOT")
+        local rp=$(realpath "$VCPKG_ROOT")
+        if [ "$VCPKG_ROOT" != "${rp}" ]; then
+            VCPKG_ROOT=$(realpath "${rp}")
             _info "Expanded VCPKG_ROOT to ${VCPKG_ROOT}"
         fi
     fi
