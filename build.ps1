@@ -64,15 +64,35 @@ function Get-CPUCount {
 
 function Ensure-Tools {
     $missing = @()
-    foreach ($t in @('git', 'cmake', 'ninja')) {
+    foreach ($t in @('git', 'cmake')) {
         if (-not (Get-Command $t -ErrorAction SilentlyContinue)) {
             $missing += $t
         }
+    }
+    $desiredGenerator = ''
+    if ($env:CMAKE_GENERATOR) { $desiredGenerator = $env:CMAKE_GENERATOR }
+    elseif ($env:BUILD_SYSTEM) { $desiredGenerator = $env:BUILD_SYSTEM }
+    else {
+        if (Get-Command ninja -ErrorAction SilentlyContinue) { $desiredGenerator = 'Ninja' } else { $desiredGenerator = 'Unix Makefiles' }
+    }
+    $requiredBuildTool = ''
+    if ($desiredGenerator -like '*Makefiles*') { $requiredBuildTool = 'make' }
+    elseif ($desiredGenerator -eq 'Ninja') { $requiredBuildTool = 'ninja' }
+    else {
+        if (Get-Command ninja -ErrorAction SilentlyContinue) { $requiredBuildTool = 'ninja' }
+        elseif (Get-Command make -ErrorAction SilentlyContinue) { $requiredBuildTool = 'make' }
+        else { $requiredBuildTool = 'none' }
+    }
+    if ($requiredBuildTool -eq 'none') { $missing += 'ninja or make' }
+    else {
+        if (-not (Get-Command $requiredBuildTool -ErrorAction SilentlyContinue)) { $missing += $requiredBuildTool }
     }
     if ($missing.Count -gt 0) {
         Fail "Missing required tools: $($missing -join ', ')" "" $False
         exit 1
     }
+
+    Ok "required tools found (git, cmake, $requiredBuildTool)"
 }
 
 function Clone-Vcpkg {
@@ -152,13 +172,23 @@ function Configure-And-Build {
     Ensure-Tools
     git submodule update --init --recursive
     $vcpkgArgs = Get-VcpkgToolchainArgs
-    $cmakeArgs = @('-G','Ninja', "-DCMAKE_BUILD_TYPE=$BuildType") + $vcpkgArgs + $ExtraArgs
+    if ($env:CMAKE_GENERATOR) { $generator = $env:CMAKE_GENERATOR }
+    elseif ($env:BUILD_SYSTEM) { $generator = $env:BUILD_SYSTEM }
+    else { if (Get-Command ninja -ErrorAction SilentlyContinue) { $generator = 'Ninja' } else { $generator = 'Unix Makefiles' } }
+    $cmakeArgs = @('-G', $generator, "-DCMAKE_BUILD_TYPE=$BuildType") + $vcpkgArgs + $ExtraArgs
     New-Item -ItemType Directory -Force -Path build | Out-Null
     Push-Location build
-    if ($DryRun) { Info "DRY RUN: cmake .. $cmakeArgs"; Pop-Location; return }
+    if ($DryRun) { Info "DRY RUN: cmake .. $($cmakeArgs -join ' ')"; Pop-Location; return }
     cmake .. $cmakeArgs
-    if ($DryRun) { Info "DRY RUN: ninja -j $(Get-CPUCount) r-type_server"; Pop-Location; return }
-    ninja -j (Get-CPUCount) r-type_server
+    if ($DryRun) {
+        if ($generator -like '*Makefiles*') { Info "DRY RUN: make -j $(Get-CPUCount) r-type_server"; Pop-Location; return }
+        else { Info "DRY RUN: ninja -j $(Get-CPUCount) r-type_server"; Pop-Location; return }
+    }
+    if ($generator -like '*Makefiles*') {
+        make -j (Get-CPUCount) r-type_server
+    } else {
+        ninja -j (Get-CPUCount) r-type_server
+    }
     $rc = $LASTEXITCODE
     Pop-Location
     exit $rc
@@ -178,9 +208,12 @@ function Invoke-RunTests {
     $vcpkgArgs = Get-VcpkgToolchainArgs
     New-Item -ItemType Directory -Force -Path build | Out-Null
     Push-Location build
-    if ($DryRun) { Info "DRY RUN: cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Debug -DENABLE_TESTS=ON $vcpkgArgs"; Pop-Location; return }
-    cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Debug -DENABLE_TESTS=ON $vcpkgArgs
-    ninja -j (Get-CPUCount) rtype_srv_unit_tests
+    if ($env:CMAKE_GENERATOR) { $generator = $env:CMAKE_GENERATOR }
+    elseif ($env:BUILD_SYSTEM) { $generator = $env:BUILD_SYSTEM }
+    else { if (Get-Command ninja -ErrorAction SilentlyContinue) { $generator = 'Ninja' } else { $generator = 'Unix Makefiles' } }
+    if ($DryRun) { Info "DRY RUN: cmake .. -G $generator -DCMAKE_BUILD_TYPE=Debug -DENABLE_TESTS=ON $($vcpkgArgs -join ' ')"; Pop-Location; return }
+    cmake .. -G $generator -DCMAKE_BUILD_TYPE=Debug -DENABLE_TESTS=ON $vcpkgArgs
+    if ($generator -like '*Makefiles*') { make -j (Get-CPUCount) rtype_srv_unit_tests } else { ninja -j (Get-CPUCount) rtype_srv_unit_tests }
     Pop-Location
     if ($DryRun) { Info 'Dry run; would run unit tests'; return }
     & ./rtype_srv_unit_tests

@@ -57,31 +57,107 @@ function _cpus() {
 
 function _ensure_tools() {
     missing=()
-    for t in git cmake ninja; do
+    # always require git and cmake
+    for t in git cmake; do
         if ! command -v "$t" >/dev/null 2>&1; then
             missing+=("$t")
         fi
     done
+
+    # decide which build tool is expected based on env or best-effort detection
+    local desired_generator=""
+    if [ -n "${CMAKE_GENERATOR:-}" ]; then
+        desired_generator="${CMAKE_GENERATOR}"
+    elif [ -n "${BUILD_SYSTEM:-}" ]; then
+        desired_generator="${BUILD_SYSTEM}"
+    else
+        # fall back to what _choose_build_system would pick (prefer ninja when present)
+        if command -v ninja >/dev/null 2>&1; then
+            desired_generator="Ninja"
+        else
+            desired_generator="Unix Makefiles"
+        fi
+    fi
+
+    local required_build_tool=""
+    if [[ "${desired_generator}" == *Makefiles* ]]; then
+        required_build_tool="make"
+    elif [[ "${desired_generator}" == "Ninja" ]]; then
+        required_build_tool="ninja"
+    else
+        if command -v ninja >/dev/null 2>&1; then
+            required_build_tool="ninja"
+        elif command -v make >/dev/null 2>&1; then
+            required_build_tool="make"
+        else
+            required_build_tool="none"
+        fi
+    fi
+
+    if [ "${required_build_tool}" = "none" ]; then
+        missing+=("ninja or make")
+    else
+        if ! command -v "${required_build_tool}" >/dev/null 2>&1; then
+            missing+=("${required_build_tool}")
+        fi
+    fi
+
     if [ ${#missing[@]} -ne 0 ]; then
         hint="Please install: ${missing[*]}"
-        for tool in "${missing[@]}"; do
-            if [ "$tool" = "ninja" ]; then
-                case "$(uname -s)" in
-                    Darwin)
-                        hint="$hint\nmacOS: brew install ninja";
-                        ;;
-                    Linux)
-                        hint="$hint\nsudo apt update && sudo apt install -y ninja-build";
-                        ;;
-                    *)
-                        hint="$hint\nWindows (choco): choco install ninja -y";
-                        ;;
-                esac
-            fi
-        done
         _error "required tool(s) missing" "$hint"
     fi
-    _success "required tools found (git, cmake, ninja)"
+
+    _success "required tools found (git, cmake, ${required_build_tool})"
+}
+
+function _invoke_build_tool() {
+    local build_system="$1"
+    local target="$2"
+
+    if [[ "${build_system}" == *Makefiles* ]]; then
+        printf '%s' "make -j$(_cpus) ${target}"
+    elif [[ "${build_system}" == "Ninja" ]]; then
+        printf '%s' "ninja -j$(_cpus) ${target}"
+    else
+        if command -v ninja >/dev/null 2>&1; then
+            printf '%s' "ninja -j$(_cpus) ${target}"
+        elif command -v make >/dev/null 2>&1; then
+            printf '%s' "make -j$(_cpus) ${target}"
+        else
+            _error "No supported build tool found" "install ninja or make"
+        fi
+    fi
+}
+
+function _run_build_tool() {
+    local build_system="$1"
+    local target="$2"
+    local cmd
+
+    cmd=$(_invoke_build_tool "${build_system}" "${target}")
+
+    if [ "${DRY_RUN:-}" = "1" ]; then
+        _success "DRY RUN: ${cmd}"
+        return 0
+    fi
+
+    if [[ "${build_system}" == *Makefiles* ]]; then
+        make -j"$(_cpus)" "${target}"
+        return $?
+    elif [[ "${build_system}" == "Ninja" ]]; then
+        ninja -j"$(_cpus)" "${target}"
+        return $?
+    else
+        if command -v ninja >/dev/null 2>&1; then
+            ninja -j"$(_cpus)" "${target}"
+            return $?
+        elif command -v make >/dev/null 2>&1; then
+            make -j"$(_cpus)" "${target}"
+            return $?
+        else
+            _error "No supported build tool found" "install ninja or make"
+        fi
+    fi
 }
 
 function _clone_vcpkg() {
@@ -215,6 +291,16 @@ function _setVcpkgTargets() {
     fi
 }
 
+function _choose_build_system() {
+    if [ -n "${CMAKE_GENERATOR:-}" ]; then
+        printf '%s' "${CMAKE_GENERATOR}"
+    elif ! command -v ninja >/dev/null 2>&1; then
+        printf '%s' "Unix Makefiles"
+    else
+        printf '%s' "Ninja"
+    fi
+}
+
 function _configure_and_build() {
     local build_type="$1"; shift
     local extra_cmake_flags=("$@")
@@ -227,24 +313,22 @@ function _configure_and_build() {
     extra_cmake_flags+=("${VCPKG_FLAGS[@]}")
     mkdir -p build
     cd build || _error "mkdir failed" "could not cd into build/"
-    _info "configuring with CMake (Ninja, ${build_type})..."
-    cmake_cmd=(cmake .. -G Ninja -DCMAKE_BUILD_TYPE="${build_type}" "${extra_cmake_flags[@]}")
+    local build_system=$(_choose_build_system)
+    _info "configuring with CMake (${build_system}, ${build_type})..."
+    cmake_cmd=(cmake .. -G "${build_system}" -DCMAKE_BUILD_TYPE="${build_type}" "${extra_cmake_flags[@]}")
     if [ "${DRY_RUN:-}" = "1" ]; then
         _success "DRY RUN: ${cmake_cmd[*]}"
         return 0
     fi
     "${cmake_cmd[@]}" || _error "cmake configuration failed" "check CMake output above"
 
-    _info "building target r-type_server with Ninja..."
-    if [ "${DRY_RUN:-}" = "1" ]; then
-        _success "DRY RUN: ninja -j$(_cpus) r-type_server"
-        return 0
-    fi
-    if ninja -j"$(_cpus)" r-type_server; then
+    _info "building target r-type_server with ${build_system}..."
+    if _run_build_tool "${build_system}" "r-type_server"; then
         _success "compiled r-type_server"
         exit 0
+    else
+        _error "compilation error" "failed to compile r-type_server"
     fi
-    _error "compilation error" "failed to compile r-type_server"
 }
 
 function _all() {
@@ -262,12 +346,13 @@ function _tests_run()
     _setVcpkgTargets
     mkdir -p build
     cd build || _error "mkdir failed" "could not cd into build/"
-    _info "configuring tests with CMake (Ninja, Debug)..."
-    cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Debug -DENABLE_TESTS=ON "${VCPKG_FLAGS[@]}" \
+    local build_system=$(_choose_build_system)
+    _info "configuring tests with CMake (${build_system}, Debug)..."
+    cmake .. -G "${build_system}" -DCMAKE_BUILD_TYPE=Debug -DENABLE_TESTS=ON "${VCPKG_FLAGS[@]}" \
         || _error "cmake configuration failed" "check CMake output above"
 
     _info "building unit tests (rtype_srv_unit_tests)…"
-    if ! ninja -j"$(_cpus)" rtype_srv_unit_tests; then
+    if ! _run_build_tool "${build_system}" "rtype_srv_unit_tests"; then
         _error "unit tests compilation error" "failed to compile rtype_srv_unit_tests"
     fi
     cd .. || _error "cd failed" "could not cd .."
@@ -331,7 +416,7 @@ do
         -h|--help)
             cat << EOF
 USAGE:
-      $0    builds r-type_server project (Ninja)
+      $0    builds r-type_server project
 
 ARGUMENTS:
       $0 [-h|--help]    displays this message
