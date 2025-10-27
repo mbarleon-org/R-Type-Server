@@ -71,7 +71,7 @@ function _install_and_bootstrap_vcpkg() {
     done
 }
 
-function _setVcpkgTargets() {
+function _set_vcpkg_targets() {
     _info "Setting VCPKG targets"
     if [ -z "${VCPKG_ROOT:-}" ]; then
         VCPKG_ROOT="$HOME/vcpkg"

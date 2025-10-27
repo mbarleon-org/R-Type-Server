@@ -13,7 +13,7 @@ function _configure_and_build() {
     _info "updating external submodules..."
     git submodule update --init --recursive
     _success "updated external submodules !"
-    _setVcpkgTargets
+    _set_vcpkg_targets
     extra_cmake_flags+=("${VCPKG_FLAGS[@]}")
     mkdir -p build
     cd build || _error "mkdir failed" "could not cd into build/"

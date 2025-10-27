@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 function _tests_run()
 {
     _ensure_tools
-    _setVcpkgTargets
+    _set_vcpkg_targets
     mkdir -p build
     cd build || _error "mkdir failed" "could not cd into build/"
     local build_system=$(_choose_build_system)
