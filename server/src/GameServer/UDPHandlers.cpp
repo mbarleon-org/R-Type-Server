@@ -2,6 +2,7 @@
 #include <RTypeSrv/GameServerUDPPacketParser.hpp>
 #include <RTypeSrv/Utils/Crypto.hpp>
 #include <RTypeSrv/Utils/Logger.hpp>
+#include <algorithm>
 #include <cstdlib>
 #include <openssl/crypto.h>
 #include <random>
