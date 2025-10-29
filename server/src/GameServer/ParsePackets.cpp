@@ -1,7 +1,10 @@
+#include "R-Engine/Plugins/Plugin.hpp"
 #include <RTypeSrv/GameServer.hpp>
 #include <RTypeSrv/GameServerPacketParser.hpp>
 #include <RTypeSrv/GameServerUDPPacketParser.hpp>
 #include <RTypeSrv/Utils/Logger.hpp>
+#include <RTypeSrv/Components.hpp>
+#include <RTypeSrv/Systems.hpp>
 #include <cstring>
 #include <iomanip>
 #include <ranges>
@@ -47,12 +50,29 @@ void rtype::srv::GameServer::handleCreate([[maybe_unused]] network::Handle handl
     uint8_t gametype = data[offset + 1];
     offset += 2;
     utils::cout("Received CREATE request from gateway, gametype: ", static_cast<int>(gametype));
-    // TODO: Actually create a game and get a real game ID
-    // For now, just send back a mock response
-    constexpr uint32_t mock_game_id = 12345;
+
+    uint32_t new_game_id = generate_unique_game_id();
+    utils::cout("Received CREATE from Gateway. Creating game with ID: ", new_game_id);
+
+    auto game_app = std::make_unique<r::Application>();
+    
+    game_app->add_events<PlayerInputEvent>();
+
+    game_app->insert_resource(SnapshotSequence{});
+
+    game_app->add_systems<spawn_player_system>(r::Schedule::STARTUP);
+    
+    game_app->add_systems<handle_player_input_system>(r::Schedule::UPDATE);
+    game_app->add_systems<movement_system>(r::Schedule::UPDATE).after<handle_player_input_system>();
+    
+    game_app->add_systems<create_snapshot_system>(r::Schedule::EVENT_CLEANUP);
+
+    _game_instances.emplace(new_game_id, std::move(game_app));
+
+    _game_instances.at(new_game_id)->init();
 
     std::vector<uint8_t> join_response =
-        GameServerPacketParser::buildJoinResponse(mock_game_id, _external_endpoint.ip, _external_endpoint.port);
+        GameServerPacketParser::buildJoinResponse(new_game_id, _external_endpoint.ip, _external_endpoint.port);
     {
         std::ostringstream ss;
         ss << std::hex << std::setfill('0');
@@ -65,7 +85,7 @@ void rtype::srv::GameServer::handleCreate([[maybe_unused]] network::Handle handl
     }
     _tcp_send_spans[handle].push_back(std::move(join_response));
     setPolloutForHandle(handle);
-    utils::cout("Sent JOIN response to gateway for game ID: ", mock_game_id);
+    utils::cout("Sent JOIN response to gateway for game ID: ", new_game_id);
 }
 
 void rtype::srv::GameServer::handleOccupancy([[maybe_unused]] network::Handle handle, [[maybe_unused]] const uint8_t *data,

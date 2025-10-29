@@ -45,8 +45,12 @@ add_library(r-type_srv SHARED ${SRC_R_TYPE_SERVER})
 target_include_directories(r-type_srv PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../network/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../ecs/include
 )
-target_link_libraries(r-type_srv PUBLIC r-type_network)
+target_link_libraries(r-type_srv PUBLIC
+    r-type_network
+    r-engine
+)
 target_compile_definitions(r-type_srv PRIVATE R_TYPE_SRV_BUILD=1)
 
 # find_package(Criterion REQUIRED)

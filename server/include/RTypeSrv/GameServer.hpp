@@ -1,11 +1,13 @@
 #pragma once
 
+#include <sys/types.h>
 #if defined(_MSC_VER)
     #pragma warning(push)
     #pragma warning(disable : 4251)
 #endif
 
 #include <RTypeNet/Interfaces.hpp>
+#include <R-Engine/Application.hpp>
 #include <RTypeSrv/Api.hpp>
 #include <RTypeSrv/Utils/NonCopyable.hpp>
 #include <array>
@@ -143,6 +145,10 @@ class RTYPE_SRV_API GameServer : public utils::NonCopyable
         void handleUDPResync(network::Handle handle, const uint8_t *data, std::size_t &offset, std::size_t bufsize, uint32_t clientId);
         void handleUDPAuthResponse(network::Handle handle, const uint8_t *data, std::size_t &offset, std::size_t bufsize,
             uint32_t clientId);
+        uint32_t generate_unique_game_id(); 
+        void _game_loop_tick();
+        void _send_game_snapshots();
+        std::vector<uint32_t> get_clients_in_game(uint32_t game_id);
 
         FdsType _fds{};
         network::NFDS _nfds = 1;
@@ -174,6 +180,9 @@ class RTYPE_SRV_API GameServer : public utils::NonCopyable
         ClientEndpointsType _client_endpoints;
         network::Endpoint _external_endpoint{};
         std::atomic<bool> *_quit_server = nullptr;
+        std::unordered_map<uint32_t, uint32_t> _client_to_game;
+        u_int32_t _next_game_id = 1;
+        std::unordered_map<uint32_t, std::unique_ptr<r::Application>> _game_instances;
 };
 
 }// namespace rtype::srv

@@ -1,6 +1,8 @@
+#include "RTypeSrv/GameServerUDPPacketParser.hpp"
 #include <RTypeSrv/Exception.hpp>
 #include <RTypeSrv/GameServer.hpp>
 #include <RTypeSrv/Utils/Logger.hpp>
+#include <RTypeSrv/Components.hpp>
 #include <ranges>
 
 /**
@@ -36,4 +38,47 @@ void rtype::srv::GameServer::StartServer() noexcept
     } catch (const Exception &e) {
         utils::cerr("Exception caught while running server: ", e.where(), ": ", e.what());
     }
+}
+
+void rtype::srv::GameServer::_send_game_snapshots()
+{
+    for (auto& [game_id, app_ptr] : _game_instances) {
+        if (!app_ptr) continue;
+
+        auto* snapshot_res = app_ptr->get_resource_ptr<GameStateSnapshot>();
+        if (!snapshot_res || snapshot_res->data.empty()) {
+            continue;
+        }
+
+        std::vector<uint32_t> clients_in_game = get_clients_in_game(game_id);
+
+        for (uint32_t client_id : clients_in_game) {
+            if (_client_ids.count(client_id)) {
+                network::Handle handle = _client_ids.at(client_id);
+                
+                auto packet = rtype::srv::GameServerUDPPacketParser::buildSnapshot(
+                    _client_sequence_nums[handle]++, 
+                    _last_received_seq[handle], 
+                    _sack_bits[handle], 
+                    client_id, 
+                    0,
+                    snapshot_res->data
+                );
+
+                _send_spans[handle].push_back(std::move(packet));
+                setPolloutForHandle(handle);
+            }
+        }
+    }
+}
+
+std::vector<uint32_t> rtype::srv::GameServer::get_clients_in_game(uint32_t game_id)
+{
+    std::vector<uint32_t> clients;;
+    for (const auto& [client, gid] : _client_to_game) {
+        if (gid == game_id) {
+            clients.push_back(client);
+        }
+    }
+    return clients;
 }

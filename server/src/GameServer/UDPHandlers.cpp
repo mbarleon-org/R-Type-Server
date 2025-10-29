@@ -1,3 +1,5 @@
+#include "RTypeSrv/GameEvents.hpp"
+#include <RTypeSrv/Components.hpp>
 #include <RTypeSrv/GameServer.hpp>
 #include <RTypeSrv/GameServerUDPPacketParser.hpp>
 #include <RTypeSrv/Utils/Crypto.hpp>
@@ -96,10 +98,61 @@ void GameServer::handleUDPJoin(network::Handle handle, const uint8_t *data, std:
         _sack_bits[handle], clientId, timestamp, cookie);
     _send_spans[handle].push_back(std::move(response));
     setPolloutForHandle(handle);
+
+    if (!_game_instances.empty()) {
+        uint32_t game_id = _game_instances.begin()->first;
+        _client_to_game[clientId] = game_id;
+        utils::cout("Client ", clientId, " assigned to game ", game_id);
+
+        auto& game_app = _game_instances.at(game_id);
+        r::ecs::Resolver resolver(&game_app->get_scene(), nullptr);
+        auto query = resolver.resolve(std::type_identity<r::ecs::Query<r::ecs::Mut<Player>>>{});
+        
+        bool player_slot_found = false;
+        for (auto [player] : query) {
+            if (player.ptr->clientId == 0) {
+                player.ptr->clientId = clientId;
+                player_slot_found = true;
+                utils::cout("ECS Player entity updated with clientId: ", clientId);
+                break;
+            }
+        }
+        if (!player_slot_found) {
+            utils::cerr("No free player slot found in ECS for clientId: ", clientId);
+        }
+    }
 }
 
 void GameServer::handleUDPInput(network::Handle handle, const uint8_t *data, std::size_t &offset, std::size_t bufsize, uint32_t clientId)
 {
+    if (_client_to_game.count(clientId) == 0) {
+        utils::cerr("Received input from client ", clientId, " who is not in a game.");
+        return;
+    }
+    uint32_t game_id = _client_to_game.at(clientId);
+    auto& game_app_ptr = _game_instances.at(game_id);
+
+    // 2. Parser le paquet d'input (exemple simple)
+    // Format supposé : [TYPE:1] où TYPE est 1=UP, 2=DOWN, etc.
+    if (offset + 1 > bufsize) return;
+    uint8_t input_type = data[offset++];
+    
+    PlayerAction action;
+    switch(input_type) {
+        case 1: action = PlayerAction::MoveUp; break;
+        case 2: action = PlayerAction::MoveDown; break;
+        // ... etc.
+        default: action = PlayerAction::Stop; break;
+    }
+
+    // 3. Envoyer l'événement à l'ECS
+    auto* events_ptr = game_app_ptr->get_resource_ptr<r::ecs::Events<PlayerInputEvent>>();
+    if (events_ptr) {
+        r::ecs::EventWriter<PlayerInputEvent> writer(events_ptr);
+        writer.send({clientId, action});
+        utils::cout("Input from client ", clientId, " sent to ECS.");
+    }
+
     while (offset + 2 <= bufsize) {
         uint8_t type = data[offset++];
         uint8_t value = data[offset++];

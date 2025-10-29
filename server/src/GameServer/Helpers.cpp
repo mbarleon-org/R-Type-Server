@@ -34,3 +34,8 @@ void rtype::srv::GameServer::_acceptClients() noexcept
         utils::cerr("Error accepting new connection: ", e.what());
     }
 }
+
+uint32_t rtype::srv::GameServer::generate_unique_game_id()
+{
+    return _next_game_id++;
+}
