@@ -6,6 +6,7 @@
 #include <vector>
 #include <cstring>
 #include <iostream>
+#include <iomanip>
 
 /* EXAMPLES OF ECS SYSTEMS (NOT FINAL) */
 

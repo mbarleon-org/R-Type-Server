@@ -6,8 +6,8 @@
     #pragma warning(disable : 4251)
 #endif
 
-#include <RTypeNet/Interfaces.hpp>
 #include <R-Engine/Application.hpp>
+#include <RTypeNet/Interfaces.hpp>
 #include <RTypeSrv/Api.hpp>
 #include <RTypeSrv/Utils/NonCopyable.hpp>
 #include <array>
@@ -73,8 +73,8 @@ class RTYPE_SRV_API GameServer : public utils::NonCopyable
         };
 
         struct LatencyMetrics {
-                std::chrono::microseconds min_rtt{(std::chrono::microseconds::max)()};
-                std::chrono::microseconds max_rtt{(std::chrono::microseconds::min)()};
+                std::chrono::microseconds min_rtt{(std::chrono::microseconds::max) ()};
+                std::chrono::microseconds max_rtt{(std::chrono::microseconds::min) ()};
                 std::chrono::microseconds avg_rtt{0};
                 uint32_t samples{0};
                 std::chrono::steady_clock::time_point last_ping;
@@ -97,19 +97,33 @@ class RTYPE_SRV_API GameServer : public utils::NonCopyable
 
         using FdsType = std::vector<network::PollFD>;
         using IP = std::pair<std::array<uint8_t, 16>, uint16_t>;
+        struct IPHash {
+                std::size_t operator()(const IP &p) const noexcept
+                {
+                    std::size_t h1 = std::hash<uint16_t>{}(p.second);
+                    std::size_t h2 = 0;
+                    for (auto b : p.first) {
+                        h2 = h2 * 31 + std::hash<uint8_t>{}(b);
+                    }
+                    return h1 ^ (h2 << 1);
+                }
+        };
         using SeqMapType = std::unordered_map<network::Handle, uint32_t>;
         using SackBitsType = std::unordered_map<network::Handle, uint8_t>;
         using PlayerStatesType = std::unordered_map<uint32_t, PlayerState>;
         using ClientIDsType = std::unordered_map<uint32_t, network::Handle>;
         using ParseErrorsType = std::unordered_map<network::Handle, uint8_t>;
+        using EndpointToClientType = std::unordered_map<IP, uint32_t, IPHash>;
         using SocketsMapType = std::unordered_map<std::size_t, network::Socket>;
         using AuthStatesType = std::unordered_map<network::Handle, AuthChallenge>;
         using ClientStatesType = std::unordered_map<network::Handle, ClientState>;
+        using EndpointToHandleType = std::unordered_map<IP, network::Handle, IPHash>;
         using RecvSpanType = std::unordered_map<network::Handle, std::vector<uint8_t>>;
         using LatencyMetricsType = std::unordered_map<network::Handle, LatencyMetrics>;
         using ClientEndpointsType = std::unordered_map<network::Handle, network::Endpoint>;
-        using SendSpanType = std::unordered_map<network::Handle, std::vector<std::vector<uint8_t>>>;
-        using RecvPacketsType = std::unordered_map<network::Handle, std::vector<std::vector<uint8_t>>>;
+        using SendSpanType = std::unordered_map<IP, std::vector<std::vector<uint8_t>>, IPHash>;
+        using RecvPacketsType = std::unordered_map<IP, std::vector<std::vector<uint8_t>>, IPHash>;
+        using TcpSendSpanType = std::unordered_map<network::Handle, std::vector<std::vector<uint8_t>>>;
         using FragBufType = std::unordered_map<std::pair<network::Handle, uint32_t>, FragmentBuffer, PairKeyHash>;
 
         void _initServer();
@@ -138,14 +152,14 @@ class RTYPE_SRV_API GameServer : public utils::NonCopyable
         void handleCreate(network::Handle handle, const uint8_t *data, std::size_t &offset, std::size_t bufsize);
         void handleOccupancy(network::Handle handle, const uint8_t *data, std::size_t &offset, std::size_t bufsize);
         static void _handleGatewayOKKO(const uint8_t cmd, const uint8_t *data, std::size_t &offset, std::size_t bufsize);
-        void handleUDPJoin(network::Handle handle, const uint8_t *data, std::size_t &offset, std::size_t bufsize, uint32_t clientId);
-        void handleUDPPing(network::Handle handle, const uint8_t *data, std::size_t &offset, std::size_t bufsize, uint32_t clientId);
-        void handleUDPPong(network::Handle handle, const uint8_t *data, std::size_t &offset, std::size_t bufsize, uint32_t clientId);
-        void handleUDPInput(network::Handle handle, const uint8_t *data, std::size_t &offset, std::size_t bufsize, uint32_t clientId);
-        void handleUDPResync(network::Handle handle, const uint8_t *data, std::size_t &offset, std::size_t bufsize, uint32_t clientId);
-        void handleUDPAuthResponse(network::Handle handle, const uint8_t *data, std::size_t &offset, std::size_t bufsize,
-            uint32_t clientId);
-        uint32_t generate_unique_game_id(); 
+        // UDP handlers now operate with endpoint (IP + port) as identifier for incoming packets.
+        void handleUDPJoin(const IP &endpoint, const uint8_t *data, std::size_t &offset, std::size_t bufsize, uint32_t clientId);
+        void handleUDPPing(const IP &endpoint, const uint8_t *data, std::size_t &offset, std::size_t bufsize, uint32_t clientId);
+        void handleUDPPong(const IP &endpoint, const uint8_t *data, std::size_t &offset, std::size_t bufsize, uint32_t clientId);
+        void handleUDPInput(const IP &endpoint, const uint8_t *data, std::size_t &offset, std::size_t bufsize, uint32_t clientId);
+        void handleUDPResync(const IP &endpoint, const uint8_t *data, std::size_t &offset, std::size_t bufsize, uint32_t clientId);
+        void handleUDPAuthResponse(const IP &endpoint, const uint8_t *data, std::size_t &offset, std::size_t bufsize, uint32_t clientId);
+        uint32_t generate_unique_game_id();
         void _game_loop_tick();
         void _send_game_snapshots();
         std::vector<uint32_t> get_clients_in_game(uint32_t game_id);
@@ -163,9 +177,11 @@ class RTYPE_SRV_API GameServer : public utils::NonCopyable
         network::Socket _tcp_sock{};
         ParseErrorsType parseErrors;
         RecvSpanType _tcp_recv_spans;
-        SendSpanType _tcp_send_spans;
+        TcpSendSpanType _tcp_send_spans;
         network::Handle _tcp_handle{};
         RecvPacketsType _recv_packets;
+        EndpointToHandleType _endpoint_to_handle;
+        EndpointToClientType _endpoint_to_client;
         AuthStatesType _auth_states{};
         network::Socket _server_sock{};
         SeqMapType _last_received_seq{};
@@ -183,6 +199,18 @@ class RTYPE_SRV_API GameServer : public utils::NonCopyable
         std::unordered_map<uint32_t, uint32_t> _client_to_game;
         u_int32_t _next_game_id = 1;
         std::unordered_map<uint32_t, std::unique_ptr<r::Application>> _game_instances;
+        // Per-endpoint state for UDP clients that are not yet associated with a handle
+        using EndpointSeqType = std::unordered_map<IP, uint32_t, IPHash>;
+        using EndpointLastRecvType = std::unordered_map<IP, uint32_t, IPHash>;
+        using EndpointSackType = std::unordered_map<IP, uint8_t, IPHash>;
+        using EndpointClientStatesType = std::unordered_map<IP, ClientState, IPHash>;
+        using EndpointAuthStatesType = std::unordered_map<IP, AuthChallenge, IPHash>;
+
+        EndpointSeqType _ep_sequence_nums;
+        EndpointLastRecvType _ep_last_received_seq;
+        EndpointSackType _ep_sack_bits;
+        EndpointClientStatesType _ep_client_states;
+        EndpointAuthStatesType _ep_auth_states;
 };
 
 }// namespace rtype::srv

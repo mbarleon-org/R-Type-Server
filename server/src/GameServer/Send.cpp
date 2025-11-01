@@ -22,30 +22,24 @@ rtype::network::Endpoint rtype::srv::GameServer::GetEndpointFromHandle(const net
 
 void rtype::srv::GameServer::_sendPackets(const network::NFDS i)
 {
-    const auto handle = _fds[i].handle;
+    const auto fd_handle = _fds[i].handle;
 
     if (!(_fds[i].revents & POLLOUT)) {
         return;
     }
-    const auto it = _send_spans.find(handle);
-    if (it == _send_spans.end()) {
-        return;
-    }
-    auto &bufs = it->second;
-    if (bufs.empty()) {
-        _fds[i].events &= ~POLLOUT;
-        return;
-    }
-    auto client_it = _client_endpoints.find(handle);
-    if (client_it == _client_endpoints.end()) {
-        bufs.clear();
-        _fds[i].events &= ~POLLOUT;
-        return;
-    }
-    const network::Endpoint &client_endpoint = client_it->second;
-    for (auto &buf : bufs) {
-        if (!buf.empty()) {
-            {
+
+    if (fd_handle == _sock.handle) {
+        for (auto it = _send_spans.begin(); it != _send_spans.end();) {
+            const auto &ep_key = it->first;
+            auto &bufs = it->second;
+            if (bufs.empty()) {
+                it = _send_spans.erase(it);
+                continue;
+            }
+            network::Endpoint client_endpoint{ep_key.first, ep_key.second};
+            for (auto &buf : bufs) {
+                if (buf.empty())
+                    continue;
                 std::ostringstream ss;
                 ss << std::hex << std::setfill('0');
                 const size_t len = buf.size();
@@ -55,49 +49,52 @@ void rtype::srv::GameServer::_sendPackets(const network::NFDS i)
                     if (j + 1 < show)
                         ss << ' ';
                 }
-                rtype::srv::utils::clog("OUT UDP handle=", handle, " to=", utils::ipToStr(client_endpoint.ip), ":", client_endpoint.port,
-                    " len=", len, " hex=", ss.str());
-            }
-            std::ostringstream ephex;
-            ephex << std::hex << std::setfill('0');
-            for (size_t b = 0; b < client_endpoint.ip.size(); ++b) {
-                ephex << std::setw(2) << static_cast<int>(client_endpoint.ip[b]);
-                if (b + 1 < client_endpoint.ip.size())
-                    ephex << ' ';
-            }
-            const bool endpoint_is_ipv6 = rtype::network::isIPv6(client_endpoint);
-            utils::clog("OUT UDP handle=", handle, " to=", utils::ipToStr(client_endpoint.ip), ":", client_endpoint.port,
-                " (raw=", ephex.str(), ") ipv6=", endpoint_is_ipv6, " len=", buf.size());
-            bool ip_all_zero = true;
-            for (auto v : client_endpoint.ip) {
-                if (v != 0) {
-                    ip_all_zero = false;
-                    break;
+                rtype::srv::utils::clog("OUT UDP to=", utils::ipToStr(client_endpoint.ip), ":", client_endpoint.port, " len=", len,
+                    " hex=", ss.str());
+
+                std::ostringstream ephex;
+                ephex << std::hex << std::setfill('0');
+                for (size_t b = 0; b < client_endpoint.ip.size(); ++b) {
+                    ephex << std::setw(2) << static_cast<int>(client_endpoint.ip[b]);
+                    if (b + 1 < client_endpoint.ip.size())
+                        ephex << ' ';
                 }
-            }
-            if (client_endpoint.port == 0 || ip_all_zero) {
-                utils::cerr("Skipping send: invalid client endpoint (port=", client_endpoint.port, ") or IP all-zero");
-                continue;
-            }
-            const ssize_t sent =
-                rtype::network::sendto(handle, buf.data(), static_cast<rtype::network::BufLen>(buf.size()), 0, client_endpoint);
-            if (sent < 0) {
-                const int err = errno;
-                if (err == EAGAIN || err == EWOULDBLOCK) {
-                    utils::cerr("Socket buffer full, will retry later");
+                const bool endpoint_is_ipv6 = rtype::network::isIPv6(client_endpoint);
+                utils::clog("OUT UDP to=", utils::ipToStr(client_endpoint.ip), ":", client_endpoint.port, " (raw=", ephex.str(),
+                    ") ipv6=", endpoint_is_ipv6, " len=", buf.size());
+
+                bool ip_all_zero = true;
+                for (auto v : client_endpoint.ip) {
+                    if (v != 0) {
+                        ip_all_zero = false;
+                        break;
+                    }
+                }
+                if (client_endpoint.port == 0 || ip_all_zero) {
+                    utils::cerr("Skipping send: invalid client endpoint (port=", client_endpoint.port, ") or IP all-zero");
                     continue;
                 }
+                const ssize_t sent =
+                    rtype::network::sendto(_sock.handle, buf.data(), static_cast<rtype::network::BufLen>(buf.size()), 0, client_endpoint);
+                if (sent < 0) {
+                    const int err = errno;
+                    if (err == EAGAIN || err == EWOULDBLOCK) {
+                        utils::cerr("Socket buffer full, will retry later");
+                        continue;
+                    }
 #if defined(_WIN32)
-                char error_buf[256];
-                strerror_s(error_buf, sizeof(error_buf), errno);
-                utils::cerr("Could not send packet: ", error_buf, " (errno=", err, ")");
+                    char error_buf[256];
+                    strerror_s(error_buf, sizeof(error_buf), errno);
+                    utils::cerr("Could not send packet: ", error_buf, " (errno=", err, ")");
 #else
-                utils::cerr("Could not send packet: ", std::strerror(err), " (errno=", err, ")");
+                    utils::cerr("Could not send packet: ", std::strerror(err), " (errno=", err, ")");
 #endif
-                continue;
+                    continue;
+                }
             }
+            it = _send_spans.erase(it);
         }
+        _fds[i].events &= ~POLLOUT;
+        return;
     }
-    bufs.clear();
-    _fds[i].events &= ~POLLOUT;
 }

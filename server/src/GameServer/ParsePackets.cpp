@@ -130,6 +130,28 @@ void rtype::srv::GameServer::_cleanupExpiredAuthChallenges() noexcept
         _auth_states.erase(h);
         _client_states.erase(h);
     }
+
+    std::vector<decltype(_ep_auth_states.begin())> ep_to_remove;
+    for (auto &kv : _ep_auth_states) {
+        const auto &entry = kv.second;
+        if (entry.attempts >= MAX_AUTH_ATTEMPTS) {
+            ep_to_remove.push_back(_ep_auth_states.find(kv.first));
+            continue;
+        }
+        if (now - entry.timestamp > AUTH_TIMEOUT) {
+            ep_to_remove.push_back(_ep_auth_states.find(kv.first));
+            continue;
+        }
+    }
+    for (auto &it : ep_to_remove) {
+        if (it != _ep_auth_states.end()) {
+            utils::cout("Cleaning up expired auth challenge for endpoint");
+            _ep_auth_states.erase(it->first);
+            _ep_client_states.erase(it->first);
+            _send_spans.erase(it->first);
+            _endpoint_to_client.erase(it->first);
+        }
+    }
 }
 
 void rtype::srv::GameServer::_parsePackets()
@@ -144,14 +166,22 @@ void rtype::srv::GameServer::_parsePackets()
             if (metrics.last_ping.time_since_epoch().count() == 0 || (now - metrics.last_ping) > ping_interval) {
                 auto pkt = GameServerUDPPacketParser::buildHeader(GSPcol::CMD::PING, GSPcol::FLAGS::CONN, _client_sequence_nums[h]++,
                     _last_received_seq[h], _sack_bits[h], GSPcol::CHANNEL::UU, GameServerUDPPacketParser::HEADER_SIZE, clientId);
-                _send_spans[h].push_back(std::move(pkt));
-                setPolloutForHandle(h);
+                for (const auto &epkv : _endpoint_to_handle) {
+                    if (epkv.second == h) {
+                        _send_spans[epkv.first].push_back(pkt);
+                        setPolloutForHandle(_sock.handle);
+                    }
+                }
                 metrics.last_ping = now;
             }
         }
     }
 
-    for (auto &[handle, packets] : _recv_packets) {
+    for (auto &[ep_key, packets] : _recv_packets) {
+        network::Handle handle = 0;
+        if (auto hit = _endpoint_to_handle.find(ep_key); hit != _endpoint_to_handle.end()) {
+            handle = hit->second;
+        }
         for (auto &packet : packets) {
             if (packet.empty())
                 continue;
@@ -195,31 +225,39 @@ void rtype::srv::GameServer::_parsePackets()
 
                 switch (static_cast<GSPcol::CMD>(cmd)) {
                     case GSPcol::CMD::JOIN:
-                        handleUDPJoin(handle, packet.data(), offset, packet.size(), clientId);
+                        handleUDPJoin(ep_key, packet.data(), offset, packet.size(), clientId);
                         break;
                     case GSPcol::CMD::AUTH:
-                        handleUDPAuthResponse(handle, packet.data(), offset, packet.size(), clientId);
+                        handleUDPAuthResponse(ep_key, packet.data(), offset, packet.size(), clientId);
                         break;
                     case GSPcol::CMD::INPUT:
-                        if (auto it = _client_states.find(handle);
-                            it != _client_states.end() && it->second.authState == AuthState::AUTHENTICATED) {
-                            handleUDPInput(handle, packet.data(), offset, packet.size(), clientId);
+                        if (handle != 0) {
+                            if (auto it = _client_states.find(handle);
+                                it != _client_states.end() && it->second.authState == AuthState::AUTHENTICATED) {
+                                handleUDPInput(ep_key, packet.data(), offset, packet.size(), clientId);
+                            } else {
+                                utils::cerr("Received INPUT from unauthenticated client ", clientId);
+                            }
                         } else {
-                            utils::cerr("Received INPUT from unauthenticated client ", clientId);
+                            utils::cerr("Received INPUT from unknown handle for client ", clientId);
                         }
                         break;
                     case GSPcol::CMD::PING:
-                        handleUDPPing(handle, packet.data(), offset, packet.size(), clientId);
+                        handleUDPPing(ep_key, packet.data(), offset, packet.size(), clientId);
                         break;
                     case GSPcol::CMD::PONG:
-                        handleUDPPong(handle, packet.data(), offset, packet.size(), clientId);
+                        handleUDPPong(ep_key, packet.data(), offset, packet.size(), clientId);
                         break;
                     case GSPcol::CMD::RESYNC:
-                        if (auto it = _client_states.find(handle);
-                            it != _client_states.end() && it->second.authState == AuthState::AUTHENTICATED) {
-                            handleUDPResync(handle, packet.data(), offset, packet.size(), clientId);
+                        if (handle != 0) {
+                            if (auto it = _client_states.find(handle);
+                                it != _client_states.end() && it->second.authState == AuthState::AUTHENTICATED) {
+                                handleUDPResync(ep_key, packet.data(), offset, packet.size(), clientId);
+                            } else {
+                                utils::cerr("Received RESYNC from unauthenticated client ", clientId);
+                            }
                         } else {
-                            utils::cerr("Received RESYNC from unauthenticated client ", clientId);
+                            utils::cerr("Received RESYNC from unknown handle for client ", clientId);
                         }
                         break;
                     default:
@@ -228,9 +266,11 @@ void rtype::srv::GameServer::_parsePackets()
                 }
             } catch (const std::exception &e) {
                 utils::cerr("Error parsing UDP packet: ", e.what());
-                parseErrors[handle]++;
-                if (parseErrors[handle] >= MAX_PARSE_ERRORS) {
-                    throw std::runtime_error("Client sent too many malformed packets.");
+                if (handle != 0) {
+                    parseErrors[handle]++;
+                    if (parseErrors[handle] >= MAX_PARSE_ERRORS) {
+                        throw std::runtime_error("Client sent too many malformed packets.");
+                    }
                 }
             }
         }

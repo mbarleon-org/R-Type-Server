@@ -21,7 +21,9 @@ void rtype::srv::GameServer::_recvPackets(const network::NFDS i)
             std::copy(std::begin(loopback), std::end(loopback), endpoint.ip.begin());
         }
         _client_endpoints[handle] = endpoint;
-        _recv_packets[handle].push_back(std::vector<uint8_t>(buffer.begin(), buffer.begin() + ret));
+        const std::pair<std::array<uint8_t, 16>, uint16_t> ep_key = {endpoint.ip, endpoint.port};
+        _recv_packets[ep_key].push_back(std::vector<uint8_t>(buffer.begin(), buffer.begin() + ret));
+        _endpoint_to_handle[ep_key] = handle;
         {
             std::ostringstream ss;
             ss << std::hex << std::setfill('0');

@@ -62,8 +62,13 @@ void rtype::srv::GameServer::_send_game_snapshots()
                 auto packet = rtype::srv::GameServerUDPPacketParser::buildSnapshot(_client_sequence_nums[handle]++,
                     _last_received_seq[handle], _sack_bits[handle], client_id, snapshot_seq_res->sequence_number, snapshot_res->data);
 
-                _send_spans[handle].push_back(std::move(packet));
-                setPolloutForHandle(handle);
+                for (const auto &epkv : _endpoint_to_handle) {
+                    if (epkv.second == handle) {
+                        _send_spans[epkv.first].push_back(std::move(packet));
+                        setPolloutForHandle(_sock.handle);
+                        break;
+                    }
+                }
             }
         }
     }

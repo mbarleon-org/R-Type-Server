@@ -13,7 +13,17 @@ void rtype::srv::GameServer::_disconnectByHandle(const network::Handle &handle) 
         disconnect(it->second);
         _sockets.erase(it);
     }
-    _send_spans.erase(handle);
+    std::vector<decltype(_endpoint_to_handle.begin())> to_erase;
+    for (auto it = _endpoint_to_handle.begin(); it != _endpoint_to_handle.end(); ++it) {
+        if (it->second == handle) {
+            _send_spans.erase(it->first);
+            _endpoint_to_client.erase(it->first);
+            to_erase.push_back(it);
+        }
+    }
+    for (auto &it : to_erase) {
+        _endpoint_to_handle.erase(it->first);
+    }
     if (const auto it = std::ranges::find_if(_fds.begin(), _fds.end(), [handle](const auto &elem) { return elem.handle == handle; });
         it != _fds.end()) {
         _fds.erase(it);
