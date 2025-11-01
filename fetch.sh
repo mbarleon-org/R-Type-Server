@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 GREEN="\033[1;32m"
-RED="\033[1;31m"
 ILC="\033[3m"
 ORG="\033[1;33m"
 RST="\033[0m"

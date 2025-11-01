@@ -5,7 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 function _clone_vcpkg() {
     local dest="${1:-}"
-    local default=$(realpath "${VCPKG_ROOT}")
+    local default
+    default=$(realpath "${VCPKG_ROOT}")
 
     if [ -z "${dest}" ]; then
         dest=$( _prompt "Where to install vcpkg? (default: ${default})" )
@@ -75,7 +76,8 @@ function _set_vcpkg_targets() {
         VCPKG_ROOT="$HOME/vcpkg"
         _info "VCPKG_ROOT not set; defaulting to ${VCPKG_ROOT}"
     else
-        local rp=$(realpath "$VCPKG_ROOT")
+        local rp
+        rp=$(realpath "$VCPKG_ROOT")
         if [ "$VCPKG_ROOT" != "${rp}" ]; then
             VCPKG_ROOT=$(realpath "${rp}")
             _info "Expanded VCPKG_ROOT to ${VCPKG_ROOT}"
