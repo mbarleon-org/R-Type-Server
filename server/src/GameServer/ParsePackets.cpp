@@ -1,10 +1,10 @@
 #include "R-Engine/Plugins/Plugin.hpp"
+#include <RTypeSrv/Components.hpp>
 #include <RTypeSrv/GameServer.hpp>
 #include <RTypeSrv/GameServerPacketParser.hpp>
 #include <RTypeSrv/GameServerUDPPacketParser.hpp>
-#include <RTypeSrv/Utils/Logger.hpp>
-#include <RTypeSrv/Components.hpp>
 #include <RTypeSrv/Systems.hpp>
+#include <RTypeSrv/Utils/Logger.hpp>
 #include <cstring>
 #include <iomanip>
 #include <ranges>
@@ -55,17 +55,16 @@ void rtype::srv::GameServer::handleCreate([[maybe_unused]] network::Handle handl
     utils::cout("Received CREATE from Gateway. Creating game with ID: ", new_game_id);
 
     auto game_app = std::make_unique<r::Application>();
-    
-    game_app->add_events<PlayerInputEvent>();
 
-    game_app->insert_resource(SnapshotSequence{});
-
-    game_app->add_systems<spawn_player_system>(r::Schedule::STARTUP);
-    
-    game_app->add_systems<handle_player_input_system>(r::Schedule::UPDATE);
-    game_app->add_systems<movement_system>(r::Schedule::UPDATE).after<handle_player_input_system>();
-    
-    game_app->add_systems<create_snapshot_system>(r::Schedule::EVENT_CLEANUP);
+    game_app->add_events<PlayerInputEvent, AssignPlayerSlotEvent>()
+        .insert_resource(SnapshotSequence{})
+        .add_systems<spawn_player_system>(r::Schedule::STARTUP)
+        .add_systems<handle_player_input_system, assign_player_slot_system>(r::Schedule::UPDATE)
+        .add_systems<movement_system>(r::Schedule::UPDATE)
+        .after<handle_player_input_system>()
+        .add_systems<debug_print_player_positions_system>(r::Schedule::UPDATE)
+        .after<movement_system>()
+        .add_systems<create_snapshot_system>(r::Schedule::EVENT_CLEANUP);
 
     _game_instances.emplace(new_game_id, std::move(game_app));
 

@@ -52,6 +52,7 @@ target_link_libraries(r-type_srv PUBLIC
     r-engine
 )
 target_compile_definitions(r-type_srv PRIVATE R_TYPE_SRV_BUILD=1)
+target_compile_definitions(r-engine PUBLIC ECS_SERVER_MODE)
 
 # find_package(Criterion REQUIRED)
 # file(GLOB TEST_SRC tests/test_*.cpp)

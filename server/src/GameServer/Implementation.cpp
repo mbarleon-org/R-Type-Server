@@ -93,7 +93,7 @@ void rtype::srv::GameServer::_serverLoop()
 {
     using namespace std::chrono;
     auto last_tick = steady_clock::now();
-    const milliseconds tick_rate(16); // ~60 ticks per seconds
+    const milliseconds tick_rate(16);// ~60 ticks per seconds
 
     while (!(*_quit_server)) {
         if (network::poll(_fds.data(), _nfds, 0) == -1) {
@@ -107,18 +107,17 @@ void rtype::srv::GameServer::_serverLoop()
         if (now - last_tick >= tick_rate) {
             _game_loop_tick();
             last_tick = now;
-            
+
             _send_game_snapshots();
         }
     }
 }
 
-
 void rtype::srv::GameServer::_game_loop_tick()
 {
-    for (auto& [game_id, app] : _game_instances) {
+    for (auto &[game_id, app] : _game_instances) {
         if (app) {
-            //utils::cout("Ticking game instance: ", game_id);
+            // utils::cout("Ticking game instance: ", game_id);
             app->tick();
         }
     }

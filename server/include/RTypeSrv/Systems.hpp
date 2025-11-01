@@ -10,14 +10,22 @@
 /* EXAMPLES OF ECS SYSTEMS (NOT FINAL) */
 
 inline void spawn_player_system(r::ecs::Commands& commands) {
-    commands.spawn(
-        Player{0},
-        Position{{100.0f, 300.0f}},
-        Velocity{{0.0f, 0.0f}}
-    );
-    std::cout << "===> [ECS] spawn_player_system: Player spawned in the scene.";
-}
+    const int MAX_PLAYERS = 10; // Number max of clients in a game
+    
+    std::cout << "===> [ECS] spawn_player_system: Spawning " << MAX_PLAYERS << " player slots..." << std::endl;
 
+    for (float i = 0; i < MAX_PLAYERS; ++i) {
+        float start_x = 100.0f;
+        float start_y = 100.0f + (i * 50.0f);
+
+        commands.spawn(
+            Player{0}, 
+            Position{{start_x, start_y}},
+            Velocity{{0.0f, 0.0f}}
+        );
+    }
+    std::cout << "===> [ECS] Player slots created." << std::endl;
+}
 
 inline void handle_player_input_system(
     r::ecs::EventReader<PlayerInputEvent> events,
@@ -41,56 +49,105 @@ inline void handle_player_input_system(
     }
 }
 
+inline void debug_print_player_positions_system(
+    r::ecs::Query<r::ecs::Ref<Player>, r::ecs::Ref<Position>> query
+) {
+    for (auto [player, position] : query) {
+        if (player.ptr->clientId != 0) {
+            std::cout << "[SERVER DEBUG] Player " << player.ptr->clientId 
+                      << ": Position (" << std::fixed << std::setprecision(1) << position.ptr->value.x
+                      << ", " << position.ptr->value.y << ")" << std::endl;
+        }
+    }
+}
+
 inline void movement_system(
     r::ecs::Res<r::core::FrameTime> time,
     r::ecs::Query<r::ecs::Mut<Position>, r::ecs::Ref<Velocity>> query
 ) {
     for (auto [position, velocity] : query) {
-        position.ptr->value += velocity.ptr->value * time.ptr->delta_time;
+        const float delta = time.ptr->delta_time;
+
+        const float dx = velocity.ptr->value.x * delta;
+        const float dy = velocity.ptr->value.y * delta;
+
+        position.ptr->value.x += dx;
+        position.ptr->value.y += dy;
     }
 }
+
+template<typename T>
+void write_big_endian(uint8_t*& ptr, T value) {
+    for (int i = sizeof(T) - 1; i >= 0; --i) {
+        *ptr++ = (value >> (i * 8)) & 0xFF;
+    }
+}
+
+inline void write_big_endian(uint8_t*& ptr, float value) {
+    uint32_t as_int;
+    std::memcpy(&as_int, &value, sizeof(float));
+    write_big_endian(ptr, as_int);
+}
+
 
 inline void create_snapshot_system(
     r::ecs::Commands& commands,
     r::ecs::ResMut<SnapshotSequence> snapshot_seq,
     r::ecs::Query<r::ecs::Ref<Position>, r::ecs::Ref<Player>> query 
 ) {
-    std::vector<uint8_t> snapshot_data;
-    
-    // --- SNAPSHOT (Example) ---
-    // [Header: uint32_t entity_count]
-    // [Entity 1: uint32_t entity_id, float x, float y]
-    // [Entity 2: uint32_t entity_id, float x, float y]
-    // ...
-
     snapshot_seq.ptr->sequence_number++;
-    uint32_t current_seq = snapshot_seq.ptr->sequence_number;
 
-    uint32_t entity_count = static_cast<uint32_t>(query.size());
+    uint32_t entity_count = 0;
+    for (auto [position, player] : query) {
+        if (player.ptr->clientId != 0) {
+            entity_count++;
+        }
+    }
 
-    size_t header_size = sizeof(uint32_t) * 2;
-    snapshot_data.resize(header_size);
-    memcpy(snapshot_data.data(), &current_seq, sizeof(uint32_t));
-    memcpy(snapshot_data.data() + sizeof(uint32_t), &entity_count, sizeof(uint32_t));
+    if (entity_count == 0) {
+        commands.insert_resource(GameStateSnapshot{});
+        return;
+    }
+
+    size_t payload_size = sizeof(uint32_t) + (entity_count * (sizeof(uint32_t) + sizeof(float) * 2));
+    std::vector<uint8_t> snapshot_data(payload_size);
+    uint8_t* ptr = snapshot_data.data();
+
+    write_big_endian(ptr, entity_count);
 
     for (auto it = query.begin(); it != query.end(); ++it) {
         auto [position, player] = *it;
-        
-        r::ecs::Entity entity_id = it.entity();
+        if (player.ptr->clientId == 0) continue;
+
+        r::ecs::Entity entity_id = static_cast<uint32_t>(it.entity());
         float x = position.ptr->value.x;
         float y = position.ptr->value.y;
-        
-        size_t current_size = snapshot_data.size();
-        snapshot_data.resize(current_size + sizeof(r::ecs::Entity) + sizeof(float) * 2);
-        
-        memcpy(snapshot_data.data() + current_size, &entity_id, sizeof(r::ecs::Entity));
-        current_size += sizeof(r::ecs::Entity);
-        
-        memcpy(snapshot_data.data() + current_size, &x, sizeof(float));
-        current_size += sizeof(float);
-        
-        memcpy(snapshot_data.data() + current_size, &y, sizeof(float));
-    }
 
-    commands.insert_resource(GameStateSnapshot{snapshot_data});
+        write_big_endian(ptr, entity_id);
+        write_big_endian(ptr, x);
+        write_big_endian(ptr, y);
+    }
+    
+    commands.insert_resource(GameStateSnapshot{std::move(snapshot_data)});
+}
+
+inline void assign_player_slot_system(
+    r::ecs::EventReader<AssignPlayerSlotEvent> events,
+    r::ecs::Query<r::ecs::Mut<Player>> query
+) {
+    for (const auto& event : events) {
+        bool slot_found = false;
+        for (auto [player] : query) {
+            if (player.ptr->clientId == 0) {
+                player.ptr->clientId = event.clientId;
+                slot_found = true;
+                std::cout <<"[ECS] Client ID " << event.clientId << " has been asigned to an entity player." << std::endl;
+                break;
+            }
+        }
+
+        if (!slot_found) {
+            std::cerr << "[ECS] No slot available: " << event.clientId << std::endl;
+        }
+    }
 }

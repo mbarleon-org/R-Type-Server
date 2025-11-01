@@ -15,3 +15,7 @@ struct PlayerInputEvent {
     uint32_t clientId;
     PlayerAction action;
 };
+
+struct AssignPlayerSlotEvent {
+    uint32_t clientId;
+};

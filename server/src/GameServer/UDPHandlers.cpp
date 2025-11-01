@@ -105,21 +105,13 @@ void GameServer::handleUDPJoin(network::Handle handle, const uint8_t *data, std:
         _client_to_game[clientId] = game_id;
         utils::cout("Client ", clientId, " assigned to game ", game_id);
 
-        auto& game_app = _game_instances.at(game_id);
-        r::ecs::Resolver resolver(&game_app->get_scene(), nullptr);
-        auto query = resolver.resolve(std::type_identity<r::ecs::Query<r::ecs::Mut<Player>>>{});
-        
-        bool player_slot_found = false;
-        for (auto [player] : query) {
-            if (player.ptr->clientId == 0) {
-                player.ptr->clientId = clientId;
-                player_slot_found = true;
-                utils::cout("ECS Player entity updated with clientId: ", clientId);
-                break;
-            }
-        }
-        if (!player_slot_found) {
-            utils::cerr("No free player slot found in ECS for clientId: ", clientId);
+        auto &game_app = _game_instances.at(game_id);
+
+        auto *events_ptr = game_app->get_resource_ptr<r::ecs::Events<AssignPlayerSlotEvent>>();
+        if (events_ptr) {
+            r::ecs::EventWriter<AssignPlayerSlotEvent> writer(events_ptr);
+            writer.send({clientId});
+            utils::cout("Événement AssignPlayerSlotEvent envoyé pour le client ID: ", clientId);
         }
     }
 }
@@ -131,23 +123,29 @@ void GameServer::handleUDPInput(network::Handle handle, const uint8_t *data, std
         return;
     }
     uint32_t game_id = _client_to_game.at(clientId);
-    auto& game_app_ptr = _game_instances.at(game_id);
+    auto &game_app_ptr = _game_instances.at(game_id);
 
-    // 2. Parser le paquet d'input (exemple simple)
-    // Format supposé : [TYPE:1] où TYPE est 1=UP, 2=DOWN, etc.
-    if (offset + 1 > bufsize) return;
+    // Parse input
+    // Format : [TYPE:1] where TYPE is 1=UP, 2=DOWN, etc.
+    if (offset + 1 > bufsize)
+        return;
     uint8_t input_type = data[offset++];
-    
+
     PlayerAction action;
-    switch(input_type) {
-        case 1: action = PlayerAction::MoveUp; break;
-        case 2: action = PlayerAction::MoveDown; break;
+    switch (input_type) {
+        case 1:
+            action = PlayerAction::MoveUp;
+            break;
+        case 2:
+            action = PlayerAction::MoveDown;
+            break;
         // ... etc.
-        default: action = PlayerAction::Stop; break;
+        default:
+            action = PlayerAction::Stop;
+            break;
     }
 
-    // 3. Envoyer l'événement à l'ECS
-    auto* events_ptr = game_app_ptr->get_resource_ptr<r::ecs::Events<PlayerInputEvent>>();
+    auto *events_ptr = game_app_ptr->get_resource_ptr<r::ecs::Events<PlayerInputEvent>>();
     if (events_ptr) {
         r::ecs::EventWriter<PlayerInputEvent> writer(events_ptr);
         writer.send({clientId, action});
