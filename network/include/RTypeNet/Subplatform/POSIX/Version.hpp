@@ -1,4 +1,0 @@
-#pragma once
-
-#define RTYPE_NET_PLATFORM_NAME_POSIX "POSIX"
-#define RTYPE_NET_PLATFORM_VER_POSIX "0.0.1"

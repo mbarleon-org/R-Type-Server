@@ -55,3 +55,6 @@ build/
 *.dylib
 *.exp
 *.lib
+*.ilk
+*.pdb
+!build.sh.d/unit_tests.sh

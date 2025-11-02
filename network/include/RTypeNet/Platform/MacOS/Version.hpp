@@ -1,4 +1,0 @@
-#pragma once
-
-#define RTYPE_NET_PLATFORM_NAME_MAC "MacOS"
-#define RTYPE_NET_PLATFORM_VER_MAC "0.0.1"
