@@ -231,15 +231,22 @@ void rtype::srv::GameServer::_parsePackets()
                         handleUDPAuthResponse(ep_key, packet.data(), offset, packet.size(), clientId);
                         break;
                     case GSPcol::CMD::INPUT:
-                        if (handle != 0) {
-                            if (auto it = _client_states.find(handle);
-                                it != _client_states.end() && it->second.authState == AuthState::AUTHENTICATED) {
-                                handleUDPInput(ep_key, packet.data(), offset, packet.size(), clientId);
-                            } else {
-                                utils::cerr("Received INPUT from unauthenticated client ", clientId);
-                            }
+                        // if (handle != 0) {
+                        //     if (auto it = _client_states.find(handle);
+                        //         it != _client_states.end() && it->second.authState == AuthState::AUTHENTICATED) {
+                        //         handleUDPInput(ep_key, packet.data(), offset, packet.size(), clientId);
+                        //     } else {
+                        //         utils::cerr("Received INPUT from unauthenticated client ", clientId);
+                        //     }
+                        // } else {
+                        //     utils::cerr("Received INPUT from unknown handle for client ", clientId);
+                        // }
+                        // break;
+                        if (auto it = _ep_client_states.find(ep_key);
+                            it != _ep_client_states.end() && it->second.authState == AuthState::AUTHENTICATED) {
+                            handleUDPInput(ep_key, packet.data(), offset, packet.size(), clientId);
                         } else {
-                            utils::cerr("Received INPUT from unknown handle for client ", clientId);
+                            utils::cerr("Received INPUT from unauthenticated endpoint for client ", clientId);
                         }
                         break;
                     case GSPcol::CMD::PING:
@@ -249,15 +256,21 @@ void rtype::srv::GameServer::_parsePackets()
                         handleUDPPong(ep_key, packet.data(), offset, packet.size(), clientId);
                         break;
                     case GSPcol::CMD::RESYNC:
-                        if (handle != 0) {
-                            if (auto it = _client_states.find(handle);
-                                it != _client_states.end() && it->second.authState == AuthState::AUTHENTICATED) {
-                                handleUDPResync(ep_key, packet.data(), offset, packet.size(), clientId);
-                            } else {
-                                utils::cerr("Received RESYNC from unauthenticated client ", clientId);
-                            }
+                        // if (handle != 0) {
+                        //     if (auto it = _client_states.find(handle);
+                        //         it != _client_states.end() && it->second.authState == AuthState::AUTHENTICATED) {
+                        //         handleUDPResync(ep_key, packet.data(), offset, packet.size(), clientId);
+                        //     } else {
+                        //         utils::cerr("Received RESYNC from unauthenticated client ", clientId);
+                        //     }
+                        // } else {
+                        //     utils::cerr("Received RESYNC from unknown handle for client ", clientId);
+                        // }
+                        if (auto it = _ep_client_states.find(ep_key);
+                            it != _ep_client_states.end() && it->second.authState == AuthState::AUTHENTICATED) {
+                            handleUDPResync(ep_key, packet.data(), offset, packet.size(), clientId);
                         } else {
-                            utils::cerr("Received RESYNC from unknown handle for client ", clientId);
+                            utils::cerr("Received RESYNC from unauthenticated endpoint for client ", clientId);
                         }
                         break;
                     default:

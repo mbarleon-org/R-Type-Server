@@ -56,19 +56,42 @@ void rtype::srv::GameServer::_send_game_snapshots()
         std::vector<uint32_t> clients_in_game = get_clients_in_game(game_id);
 
         for (uint32_t client_id : clients_in_game) {
-            if (_client_ids.count(client_id)) {
-                network::Handle handle = _client_ids.at(client_id);
+            // if (_client_ids.count(client_id)) {
+            //     network::Handle handle = _client_ids.at(client_id);
 
-                auto packet = rtype::srv::GameServerUDPPacketParser::buildSnapshot(_client_sequence_nums[handle]++,
-                    _last_received_seq[handle], _sack_bits[handle], client_id, snapshot_seq_res->sequence_number, snapshot_res->data);
+            //     auto packet = rtype::srv::GameServerUDPPacketParser::buildSnapshot(_client_sequence_nums[handle]++,
+            //         _last_received_seq[handle], _sack_bits[handle], client_id, snapshot_seq_res->sequence_number, snapshot_res->data);
 
-                for (const auto &epkv : _endpoint_to_handle) {
-                    if (epkv.second == handle) {
-                        _send_spans[epkv.first].push_back(std::move(packet));
-                        setPolloutForHandle(_sock.handle);
-                        break;
-                    }
+            //     for (const auto &epkv : _endpoint_to_handle) {
+            //         if (epkv.second == handle) {
+            //             _send_spans[epkv.first].push_back(std::move(packet));
+            //             setPolloutForHandle(_sock.handle);
+            //             break;
+            //         }
+            //     }
+            // }
+            std::optional<IP> client_endpoint;
+            for (const auto& [ep, cid] : _endpoint_to_client) {
+                if (cid == client_id) {
+                    client_endpoint = ep;
+                    break;
                 }
+            }
+            
+            if (client_endpoint.has_value()) {
+                const auto& ep = client_endpoint.value();
+
+                // Utiliser les maps basées sur l'endpoint pour les numéros de séquence
+                auto packet = rtype::srv::GameServerUDPPacketParser::buildSnapshot(
+                    _ep_sequence_nums[ep]++,
+                    _ep_last_received_seq[ep],
+                    _ep_sack_bits[ep],
+                    client_id,
+                    snapshot_seq_res->sequence_number,
+                    snapshot_res->data);
+                
+                _send_spans[ep].push_back(std::move(packet));
+                setPolloutForHandle(_sock.handle);
             }
         }
     }
